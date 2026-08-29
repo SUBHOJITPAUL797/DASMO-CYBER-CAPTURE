@@ -143,6 +143,28 @@ class CyberStreamServer(
                     }
                 }
 
+                // Handle CORS preflight
+                if (method.equals("OPTIONS", ignoreCase = true)) {
+                    val optionsResp = (
+                        "HTTP/1.1 204 No Content\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n" +
+                        "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+                        "Access-Control-Allow-Headers: Content-Type, Authorization\r\n" +
+                        "Connection: close\r\n\r\n"
+                    ).toByteArray()
+                    outputStream.write(optionsResp)
+                    outputStream.flush()
+                    socket.close()
+                    return@withContext
+                }
+
+                val hostHeader = headers["host"]?.split(":")?.get(0)
+                val resolvedHostIp = if (!hostHeader.isNullOrEmpty() && hostHeader != "0.0.0.0" && hostHeader != "localhost") {
+                    hostHeader
+                } else {
+                    socket.localAddress.hostAddress?.takeIf { it != "0.0.0.0" } ?: "127.0.0.1"
+                }
+
                 when {
                     // MJPEG Video Stream
                     uri.startsWith("/video_feed") || uri.startsWith("/mjpeg") || uri.startsWith("/live.mjpg") -> {
@@ -197,7 +219,9 @@ class CyberStreamServer(
                             val query = uri.substring(queryIndex + 1)
                             val params = query.split("&").associate {
                                 val p = it.split("=")
-                                if (p.size == 2) p[0] to p[1] else p[0] to ""
+                                val k = if (p.isNotEmpty()) try { java.net.URLDecoder.decode(p[0], "UTF-8") } catch (_: Exception) { p[0] } else ""
+                                val v = if (p.size == 2) try { java.net.URLDecoder.decode(p[1], "UTF-8") } catch (_: Exception) { p[1] } else ""
+                                k to v
                             }
                             val action = params["action"] ?: ""
                             val value = params["value"] ?: ""
@@ -274,7 +298,7 @@ class CyberStreamServer(
                     }
 
                     // Speaker audio stream receiver (PC plays audio to phone speaker)
-                    uri.startsWith("/speaker_feed") && method == "POST" -> {
+                    uri.startsWith("/speaker_feed") && method.equals("POST", ignoreCase = true) -> {
                         val inputStream = socket.getInputStream()
                         val buffer = ByteArray(4096)
                         while (socket.isConnected && !socket.isClosed && isRunning.get()) {
@@ -286,7 +310,7 @@ class CyberStreamServer(
 
                     // Download 1-Click Desktop Virtual Camera & Mic Driver (Named "DASMO CYBER CAPTURE")
                     uri.startsWith("/download/dasmo_virtualcam.py") -> {
-                        val script = getDasmoPythonBridgeScript(socket.localAddress.hostAddress ?: "127.0.0.1")
+                        val script = getDasmoPythonBridgeScript(resolvedHostIp)
                         val response = (
                             "HTTP/1.1 200 OK\r\n" +
                             "Content-Type: text/x-python\r\n" +
@@ -301,7 +325,7 @@ class CyberStreamServer(
                     }
 
                     uri.startsWith("/download/dasmo_install.bat") -> {
-                        val bat = getDasmoBatchScript(socket.localAddress.hostAddress ?: "127.0.0.1")
+                        val bat = getDasmoBatchScript(resolvedHostIp)
                         val response = (
                             "HTTP/1.1 200 OK\r\n" +
                             "Content-Type: application/x-bat\r\n" +
@@ -856,24 +880,31 @@ h, w, _ = frame.shape
 print(f"[+] Video Stream Resolution: {w}x{h} @ 30 FPS")
 print("[+] Registering Virtual Camera: 'DASMO CYBER CAPTURE'...")
 
+def stream_camera(cam_instance):
+    print(f"[SUCCESS] Virtual Camera active: '{cam_instance.device}'")
+    print("[*] Open WhatsApp Desktop > Settings > Audio/Video > Camera")
+    print(f"[*] Select: '{cam_instance.device}'")
+    print("[*] Press Ctrl+C to stop.")
+    while True:
+        r, f = cap.read()
+        if not r or f is None:
+            time.sleep(0.01)
+            continue
+        cam_instance.send(f)
+        cam_instance.sleep_until_next_frame()
+
 try:
-    # Registers virtual camera under the custom device name "DASMO CYBER CAPTURE"
-    with pyvirtualcam.Camera(width=w, height=h, fps=30, device="DASMO CYBER CAPTURE", fmt=pyvirtualcam.PixelFormat.BGR) as cam:
-        print(f"[SUCCESS] Virtual Camera active: '{cam.device}'")
-        print("[*] Open WhatsApp Desktop > Settings > Audio/Video > Camera")
-        print("[*] Select: 'DASMO CYBER CAPTURE'")
-        print("[*] Press Ctrl+C to stop.")
-
-        while True:
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                time.sleep(0.01)
-                continue
-            cam.send(frame)
-            cam.sleep_until_next_frame()
-
+    try:
+        with pyvirtualcam.Camera(width=w, height=h, fps=30, device="DASMO CYBER CAPTURE", fmt=pyvirtualcam.PixelFormat.BGR) as cam:
+            stream_camera(cam)
+    except Exception as e:
+        print(f"[*] Default device fallback notice: {e}")
+        with pyvirtualcam.Camera(width=w, height=h, fps=30, fmt=pyvirtualcam.PixelFormat.BGR) as cam:
+            stream_camera(cam)
 except KeyboardInterrupt:
     print("\n[*] Stopping DASMO Cyber Capture Desktop Bridge...")
+except Exception as fatal_e:
+    print(f"[ERROR] {fatal_e}")
 finally:
     cap.release()
     print("[*] Closed cleanly.")

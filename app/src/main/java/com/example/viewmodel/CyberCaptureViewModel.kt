@@ -58,6 +58,9 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
+    private val _appUpdateInfo = MutableStateFlow(com.example.updater.AppUpdateInfo())
+    val appUpdateInfo: StateFlow<com.example.updater.AppUpdateInfo> = _appUpdateInfo.asStateFlow()
+
     private var cameraManager: CyberCameraManager? = null
     private var audioEngine = CyberAudioEngine(application)
     private var streamServer: CyberStreamServer? = null
@@ -71,6 +74,17 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     init {
         updateNetworkInfo()
         generatePairingQrCode()
+        checkAppUpdates()
+    }
+
+    fun checkAppUpdates(onComplete: ((com.example.updater.AppUpdateInfo) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val info = com.example.updater.CyberUpdateManager.checkForUpdates(currentVersion = "1.0")
+            _appUpdateInfo.value = info
+            withContext(Dispatchers.Main) {
+                onComplete?.invoke(info)
+            }
+        }
     }
 
     fun initCameraManager(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
@@ -270,15 +284,14 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     fun setAudioRouting(routing: AudioRouting) {
         _config.value = _config.value.copy(audioRouting = routing)
         if (_config.value.isSpeakerEnabled) {
-            audioEngine.stopSpeakerPlayback()
-            audioEngine.initSpeakerPlayback(routing, _config.value.speakerVolume)
+            audioEngine.setAudioRouting(routing)
         }
     }
 
     fun setSpeakerVolume(vol: Float) {
         _config.value = _config.value.copy(speakerVolume = vol)
         if (_config.value.isSpeakerEnabled) {
-            audioEngine.initSpeakerPlayback(_config.value.audioRouting, vol)
+            audioEngine.setSpeakerVolume(vol)
         }
     }
 

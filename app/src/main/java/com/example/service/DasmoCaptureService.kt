@@ -43,7 +43,17 @@ class DasmoCaptureService : Service() {
         }
 
         val notification = buildNotification("Transmitting 100% On-Air Wi-Fi Stream")
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var serviceType = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                serviceType = serviceType or 
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or 
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            startForeground(NOTIFICATION_ID, notification, serviceType)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         return START_STICKY
     }

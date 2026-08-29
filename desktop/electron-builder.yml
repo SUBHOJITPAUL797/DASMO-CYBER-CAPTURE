@@ -1,0 +1,37 @@
+appId: com.dasmocyber.capture.desktop
+productName: DASMO CYBER CAPTURE
+copyright: Copyright © 2026 DASMO CYBER CAPTURE / AirLink Pro
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - "**/*"
+  - "!dist/*"
+  - "!**/*.ts"
+  - "!*.map"
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  signAndEditExecutable: false
+  icon: src/renderer/assets/icon.png
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DASMO CYBER CAPTURE
+  uninstallDisplayName: DASMO CYBER CAPTURE (Uninstall)
+  runAfterFinish: true

@@ -16,3 +16,8 @@
 local.properties
 .env
 debug.keystore
+
+# Desktop Electron & Node
+desktop/node_modules/
+desktop/dist/
+desktop/.icon-ico/

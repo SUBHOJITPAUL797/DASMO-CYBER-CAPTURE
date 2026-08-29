@@ -28,7 +28,7 @@ class CyberAudioEngine(private val context: Context) {
 
     private val sampleRate = 48000
     private val channelConfigIn = AudioFormat.CHANNEL_IN_MONO
-    private val channelConfigOut = AudioFormat.CHANNEL_OUT_STEREO
+    private val channelConfigOut = AudioFormat.CHANNEL_OUT_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
     private var audioRecord: AudioRecord? = null
@@ -42,7 +42,9 @@ class CyberAudioEngine(private val context: Context) {
     private val _micDbLevel = MutableStateFlow(-60f)
     val micDbLevel: StateFlow<Float> = _micDbLevel
 
+    @Volatile
     private var isMuted = false
+    @Volatile
     private var micGain = 1.0f
 
     @SuppressLint("MissingPermission")
@@ -156,18 +158,21 @@ class CyberAudioEngine(private val context: Context) {
     // --- Speaker Output Engine (PC System Audio -> Phone Speaker) ---
     fun initSpeakerPlayback(routing: AudioRouting = AudioRouting.SPEAKERPHONE, volume: Float = 0.9f) {
         try {
+            if (audioTrack != null) {
+                setSpeakerVolume(volume)
+                setAudioRouting(routing)
+                return
+            }
+
             val minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
             val bufferSize = (minBufSize * 2).coerceAtLeast(8192)
 
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            if (routing == AudioRouting.SPEAKERPHONE) {
-                audioManager?.isSpeakerphoneOn = true
-            }
+            applyAudioRouting(routing)
 
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
@@ -189,6 +194,33 @@ class CyberAudioEngine(private val context: Context) {
         }
     }
 
+    fun setSpeakerVolume(volume: Float) {
+        try {
+            audioTrack?.setVolume(volume.coerceIn(0f, 1f))
+        } catch (e: Exception) {
+            Log.w("CyberAudioEngine", "Failed to set speaker volume", e)
+        }
+    }
+
+    fun setAudioRouting(routing: AudioRouting) {
+        applyAudioRouting(routing)
+    }
+
+    private fun applyAudioRouting(routing: AudioRouting) {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            if (routing == AudioRouting.SPEAKERPHONE) {
+                audioManager.mode = AudioManager.MODE_NORMAL
+                audioManager.isSpeakerphoneOn = true
+            } else {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager.isSpeakerphoneOn = false
+            }
+        } catch (e: Exception) {
+            Log.w("CyberAudioEngine", "Failed to apply audio routing", e)
+        }
+    }
+
     fun playSpeakerPcmChunk(data: ByteArray, offset: Int, length: Int) {
         try {
             audioTrack?.write(data, offset, length)
@@ -199,6 +231,8 @@ class CyberAudioEngine(private val context: Context) {
 
     fun stopSpeakerPlayback() {
         try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.mode = AudioManager.MODE_NORMAL
             audioTrack?.stop()
             audioTrack?.release()
         } catch (_: Exception) {}

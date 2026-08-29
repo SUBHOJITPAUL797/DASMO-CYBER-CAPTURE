@@ -81,6 +81,7 @@ fun CyberSettingsScreen(
     onToggleGrid: () -> Unit,
     onAddDevice: (String, String) -> Unit,
     onRemoveDevice: (PairedDevice) -> Unit,
+    onCheckUpdatesClick: (() -> Unit)? = null,
     onBackClick: () -> Unit
 ) {
     var showAddDeviceDialog by remember { mutableStateOf(false) }
@@ -264,6 +265,40 @@ fun CyberSettingsScreen(
                         Text("• 1-Click Desktop Installer: Download directly from http://[PHONE_IP]:${config.serverPort}", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary)
                         Text("• Protocol: HTTP Multipart MJPEG + Raw PCM Full-Duplex Audio", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
                         Text("• Transmission: 100% On-The-Air Wi-Fi & LAN (Zero USB Cables Required)", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = CyberCyan)
+                    }
+                }
+            }
+
+            // Section 5: In-App Updates & Releases
+            item {
+                CyberSettingsCard(title = "CYBER OTA UPDATE & RELEASES", icon = Icons.Default.Settings) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Current Version: v1.0", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(CyberGreen.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("STABLE", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = CyberGreen, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                onCheckUpdatesClick?.invoke()
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("btn_check_updates_settings"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack)
+                        ) {
+                            Text("🔄 Check for Updates Now", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
                     }
                 }
             }

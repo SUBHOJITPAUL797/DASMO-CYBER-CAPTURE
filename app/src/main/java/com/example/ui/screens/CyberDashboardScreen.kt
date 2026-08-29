@@ -59,10 +59,18 @@ fun CyberDashboardScreen(
     val isStreaming by viewModel.isStreamingActive.collectAsState()
     val qrBitmap by viewModel.qrCodeBitmap.collectAsState()
     val toastMsg by viewModel.toastMessage.collectAsState()
+    val updateInfo by viewModel.appUpdateInfo.collectAsState()
 
     var showWebPortalModal by remember { mutableStateOf(false) }
     var showFiltersModal by remember { mutableStateOf(false) }
     var showAudioModal by remember { mutableStateOf(false) }
+    var showUpdateModal by remember { mutableStateOf(false) }
+
+    LaunchedEffect(updateInfo.isUpdateAvailable) {
+        if (updateInfo.isUpdateAvailable) {
+            showUpdateModal = true
+        }
+    }
 
     val permissionsState = rememberMultiplePermissionsState(
         permissions = listOf(
@@ -202,6 +210,13 @@ fun CyberDashboardScreen(
                     onSpeakerVolumeChanged = { viewModel.setSpeakerVolume(it) },
                     onAudioRoutingChanged = { viewModel.setAudioRouting(it) },
                     onDismiss = { showAudioModal = false }
+                )
+            }
+
+            if (showUpdateModal && updateInfo.isUpdateAvailable) {
+                CyberUpdateModal(
+                    updateInfo = updateInfo,
+                    onDismiss = { showUpdateModal = false }
                 )
             }
         }

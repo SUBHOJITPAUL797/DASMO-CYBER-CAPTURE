@@ -1,0 +1,31 @@
+{
+  "name": "dasmo-cyber-capture-desktop",
+  "version": "1.0.0",
+  "description": "AirLink Pro - DASMO CYBER CAPTURE Windows Desktop Companion, Virtual Camera & Audio Ecosystem",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis",
+    "dist:msi": "electron-builder --win msi"
+  },
+  "keywords": [
+    "virtual-camera",
+    "virtual-mic",
+    "webcam",
+    "airlink",
+    "dasmo-cyber-capture",
+    "windows11"
+  ],
+  "author": "DASMO CYBER CAPTURE",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.3.0",
+    "ws": "^8.18.0"
+  }
+}

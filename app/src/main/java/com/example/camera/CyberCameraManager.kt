@@ -37,12 +37,16 @@ class CyberCameraManager(
     private var imageAnalysis: ImageAnalysis? = null
     private var preview: Preview? = null
     private val analysisExecutor = Executors.newSingleThreadExecutor()
-
+    @Volatile
     private var currentConfig = CyberConfig()
     private val isProcessingFrame = AtomicBoolean(false)
     private val frameCount = AtomicLong(0)
     private var lastFpsUpdateTime = System.currentTimeMillis()
     private var framesSinceLastUpdate = 0
+
+    private var cachedPauseBitmap: Bitmap? = null
+    private var cachedPauseWidth = 0
+    private var cachedPauseHeight = 0
 
     private val _measuredFps = MutableStateFlow(0f)
     val measuredFps: StateFlow<Float> = _measuredFps
@@ -239,7 +243,13 @@ class CyberCameraManager(
     }
 
     private fun generatePrivacyPauseBitmap(width: Int, height: Int): Bitmap {
-        val bitmap = Bitmap.createBitmap(width.coerceAtLeast(320), height.coerceAtLeast(240), Bitmap.Config.ARGB_8888)
+        val targetW = width.coerceAtLeast(320)
+        val targetH = height.coerceAtLeast(240)
+        if (cachedPauseBitmap != null && cachedPauseWidth == targetW && cachedPauseHeight == targetH) {
+            return cachedPauseBitmap!!
+        }
+
+        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bitmap)
         
         // Dark cyber slate background
@@ -254,18 +264,18 @@ class CyberCameraManager(
         // Grid pattern
         val step = 40f
         var x = 0f
-        while (x < width) {
-            canvas.drawLine(x, 0f, x, height.toFloat(), paintGrid)
+        while (x < targetW) {
+            canvas.drawLine(x, 0f, x, targetH.toFloat(), paintGrid)
             x += step
         }
         var y = 0f
-        while (y < height) {
-            canvas.drawLine(0f, y, width.toFloat(), y, paintGrid)
+        while (y < targetH) {
+            canvas.drawLine(0f, y, targetW.toFloat(), y, paintGrid)
             y += step
         }
         
-        val cx = width / 2f
-        val cy = height / 2f
+        val cx = targetW / 2f
+        val cy = targetH / 2f
         
         // Glowing Pause Banner Box
         val bannerPaint = android.graphics.Paint().apply {
@@ -308,6 +318,10 @@ class CyberCameraManager(
         }
         canvas.drawText("AUDIO & CALL LINK ACTIVE", cx, cy + 55f, textSubPaint)
         
+        cachedPauseBitmap = bitmap
+        cachedPauseWidth = targetW
+        cachedPauseHeight = targetH
+
         return bitmap
     }
 
