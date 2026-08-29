@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:color="#0B111E" android:offset="0.0" />
+                <item android:color="#0D1F3C" android:offset="0.5" />
+                <item android:color="#040814" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Cyber Grid Lines -->
+    <path
+        android:strokeColor="#183660"
+        android:strokeWidth="0.8"
+        android:pathData="M18,0v108 M36,0v108 M54,0v108 M72,0v108 M90,0v108 M0,18h108 M0,36h108 M0,54h108 M0,72h108 M0,90h108" />
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="1.2"
+        android:pathData="M24,24h12 M24,24v12 M84,24h-12 M84,24v12 M24,84h12 M24,84v-12 M84,84h-12 M84,84v-12" />
+</vector>
+

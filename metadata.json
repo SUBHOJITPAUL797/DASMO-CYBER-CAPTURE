@@ -1,0 +1,7 @@
+{
+  "name": "DASMO CYBER CAPTURE",
+  "description": "Wireless high-performance Cyber Camera, Microphone, and Audio ecosystem over Wi-Fi and Local Network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
