@@ -120,21 +120,29 @@ class CyberCameraManager(
 
                 // Matrix for rotation & front mirror
                 val matrix = Matrix().apply {
-                    postRotate(rotationDegrees.toFloat())
+                    if (rotationDegrees != 0) {
+                        postRotate(rotationDegrees.toFloat())
+                    }
                     if (currentConfig.cameraFacing == CameraFacing.FRONT && currentConfig.isMirrored) {
                         postScale(-1f, 1f)
                     }
                 }
 
-                val rotatedBitmap = Bitmap.createBitmap(
-                    bitmap,
-                    0,
-                    0,
-                    bitmap.width,
-                    bitmap.height,
-                    matrix,
-                    true
-                )
+                val rotatedBitmap = if (!matrix.isIdentity) {
+                    val rotated = Bitmap.createBitmap(
+                        bitmap,
+                        0,
+                        0,
+                        bitmap.width,
+                        bitmap.height,
+                        matrix,
+                        false
+                    )
+                    bitmap.recycle()
+                    rotated
+                } else {
+                    bitmap
+                }
 
                 // Check if video stream is paused (Privacy Hold mode for WhatsApp/calls)
                 val finalBitmap = if (currentConfig.isVideoPaused) {
@@ -148,14 +156,18 @@ class CyberCameraManager(
 
                 _latestSnapshot.value = finalBitmap
 
-                // Compress to JPEG
-                val bos = ByteArrayOutputStream()
+                // Compress to JPEG with fast buffer reuse
+                val bos = ByteArrayOutputStream(65536)
                 finalBitmap.compress(
                     Bitmap.CompressFormat.JPEG,
-                    currentConfig.jpegQuality.coerceIn(40, 95),
+                    currentConfig.jpegQuality.coerceIn(40, 85),
                     bos
                 )
                 val jpegBytes = bos.toByteArray()
+
+                if (finalBitmap != rotatedBitmap) {
+                    rotatedBitmap.recycle()
+                }
 
                 onNewFrameAvailable(jpegBytes)
 

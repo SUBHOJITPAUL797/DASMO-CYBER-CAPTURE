@@ -274,6 +274,13 @@ ipcMain.handle('driver:install-deps', async () => {
     return await driverBridge.installDependencies();
 });
 
+ipcMain.handle('driver:install-audio', () => {
+    const { exec } = require('child_process');
+    const batPath = path.join(__dirname, '../../drivers/install_virtual_audio.bat');
+    exec(`cmd.exe /c start "" "${batPath}"`);
+    return true;
+});
+
 ipcMain.handle('driver:start-cam', (event, phoneIp) => {
     driverBridge.startVirtualCamera(phoneIp);
     return true;

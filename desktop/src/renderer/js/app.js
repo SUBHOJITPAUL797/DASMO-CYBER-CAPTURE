@@ -311,6 +311,10 @@ async function checkDriverEnv() {
         }
     });
 
+    document.getElementById('btnInstallAudioDriver')?.addEventListener('click', () => {
+        window.dasmoAPI?.installAudioDriver();
+    });
+
     window.dasmoAPI.onDriverStatusChange((data) => {
         const badge = document.getElementById('driverStatusBadge');
         if (data.status === 'running') {

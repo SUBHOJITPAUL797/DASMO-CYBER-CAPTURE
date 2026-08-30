@@ -121,6 +121,9 @@ class CyberStreamServer(
     private suspend fun handleClient(socket: Socket) {
         withContext(Dispatchers.IO) {
             try {
+                socket.tcpNoDelay = true
+                socket.sendBufferSize = 16384
+                socket.receiveBufferSize = 16384
                 socket.soTimeout = 15000
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val outputStream = socket.getOutputStream()
