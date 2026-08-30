@@ -21,3 +21,9 @@ debug.keystore
 desktop/node_modules/
 desktop/dist/
 desktop/.icon-ico/
+
+# Built Binaries
+*.apk
+*.aab
+*.msi
+*.exe
