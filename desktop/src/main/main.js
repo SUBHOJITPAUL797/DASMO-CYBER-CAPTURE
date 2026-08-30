@@ -5,6 +5,11 @@ const { NetworkDiscoveryEngine } = require('./discovery');
 const { HardwareDriverBridge } = require('./bridge');
 const { checkForDesktopUpdates } = require('./updater');
 
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+}
+
 let mainWindow = null;
 let popoutWindow = null;
 let tray = null;
@@ -238,6 +243,23 @@ app.whenReady().then(() => {
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
+
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+});
+
+app.on('before-quit', () => {
+    app.isQuitting = true;
+    try {
+        driverBridge?.stopVirtualCamera();
+        driverBridge?.stopAudioBridge();
+        discoveryEngine?.stopDiscovery();
+    } catch (_) {}
 });
 
 app.on('window-all-closed', () => {
