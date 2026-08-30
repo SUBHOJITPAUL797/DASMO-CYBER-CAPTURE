@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +88,7 @@ fun CyberSettingsScreen(
     var showAddDeviceDialog by remember { mutableStateOf(false) }
     var newDeviceName by remember { mutableStateOf("") }
     var newDeviceIp by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -298,6 +300,20 @@ fun CyberSettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack)
                         ) {
                             Text("🔄 Check for Updates Now", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                com.example.updater.CyberUpdateManager.openUpdateLink(
+                                    context,
+                                    "https://github.com/SUBHOJITPAUL797/DASMO-CYBER-CAPTURE/releases"
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("btn_view_releases_github"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberSurfaceVariant, contentColor = CyberTextPrimary)
+                        ) {
+                            Text("🌐 View Releases on GitHub", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                         }
                     }
                 }

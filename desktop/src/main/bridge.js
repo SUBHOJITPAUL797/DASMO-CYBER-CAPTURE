@@ -1,12 +1,26 @@
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { app } = require('electron');
 const EventEmitter = require('events');
+
+function getDriverScriptPath(scriptName) {
+    if (app && app.isPackaged) {
+        const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'drivers', scriptName);
+        if (fs.existsSync(unpackedPath)) return unpackedPath;
+        const resPath = path.join(process.resourcesPath, 'drivers', scriptName);
+        if (fs.existsSync(resPath)) return resPath;
+    }
+    const devPath = path.join(__dirname, '../../drivers', scriptName);
+    if (fs.existsSync(devPath)) return devPath;
+    return path.join(process.cwd(), 'drivers', scriptName);
+}
 
 class HardwareDriverBridge extends EventEmitter {
     constructor() {
         super();
         this.bridgeProcess = null;
+        this.audioProcess = null;
         this.isActive = false;
         this.currentDeviceIp = null;
         this.status = 'idle'; // idle | launching | running | error
@@ -24,14 +38,14 @@ class HardwareDriverBridge extends EventEmitter {
                 }
                 const versionStr = (stdout || stderr || '').trim();
                 
-                // Check opencv and pyvirtualcam
-                exec('python -c "import cv2, pyvirtualcam; print(\'OK\')"', (pkgErr, pkgStdout) => {
+                // Check opencv, pyvirtualcam, and sounddevice
+                exec('python -c "import cv2, pyvirtualcam, sounddevice; print(\'OK\')"', (pkgErr, pkgStdout) => {
                     const hasPackages = !pkgErr && pkgStdout.includes('OK');
                     resolve({
                         hasPython: true,
                         version: versionStr,
                         hasPackages: hasPackages,
-                        message: hasPackages ? 'Virtual Camera Driver Ready' : 'Dependencies need installation (opencv-python, pyvirtualcam)'
+                        message: hasPackages ? '✓ Virtual Camera & Audio Drivers Ready' : 'Dependencies need installation'
                     });
                 });
             });
@@ -40,11 +54,12 @@ class HardwareDriverBridge extends EventEmitter {
 
     installDependencies() {
         return new Promise((resolve, reject) => {
-            const child = exec('pip install opencv-python pyvirtualcam', (err, stdout, stderr) => {
+            // Use python -m pip to avoid 'pip not found' error
+            const child = exec('python -m pip install --quiet opencv-python pyvirtualcam sounddevice numpy', (err, stdout, stderr) => {
                 if (err) {
                     return reject(new Error(stderr || err.message));
                 }
-                resolve(stdout);
+                resolve(stdout || 'Dependencies installed successfully');
             });
         });
     }
@@ -58,12 +73,12 @@ class HardwareDriverBridge extends EventEmitter {
         this.status = 'launching';
         this.emit('status_change', { status: this.status, message: 'Launching DASMO Virtual Camera Bridge...' });
 
-        const scriptPath = path.join(__dirname, '../../drivers/dasmo_virtualcam.py');
+        const scriptPath = getDriverScriptPath('dasmo_virtualcam.py');
 
         // Check if driver script exists
         if (!fs.existsSync(scriptPath)) {
             this.status = 'error';
-            this.emit('status_change', { status: 'error', message: 'Driver script dasmo_virtualcam.py not found.' });
+            this.emit('status_change', { status: 'error', message: `Driver script not found: ${scriptPath}` });
             return;
         }
 
@@ -123,7 +138,7 @@ class HardwareDriverBridge extends EventEmitter {
             this.stopAudioBridge();
         }
 
-        const scriptPath = path.join(__dirname, '../../drivers/dasmo_audio_bridge.py');
+        const scriptPath = getDriverScriptPath('dasmo_audio_bridge.py');
         if (!fs.existsSync(scriptPath)) return;
 
         try {
@@ -160,4 +175,4 @@ class HardwareDriverBridge extends EventEmitter {
     }
 }
 
-module.exports = { HardwareDriverBridge };
+module.exports = { HardwareDriverBridge, getDriverScriptPath };

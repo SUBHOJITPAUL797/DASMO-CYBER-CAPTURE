@@ -12,6 +12,13 @@ files:
   - "!**/*.ts"
   - "!*.map"
 
+asarUnpack:
+  - "drivers/**/*"
+
+extraResources:
+  - from: "drivers"
+    to: "drivers"
+
 win:
   target:
     - target: dir

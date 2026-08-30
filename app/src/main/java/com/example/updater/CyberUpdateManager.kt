@@ -14,7 +14,7 @@ import java.net.URL
 
 data class AppUpdateInfo(
     val isUpdateAvailable: Boolean = false,
-    val currentVersion: String = "1.0",
+    val currentVersion: String = "1.0.0",
     val latestVersion: String = "",
     val releaseTitle: String = "",
     val releaseNotes: String = "",
@@ -28,7 +28,7 @@ object CyberUpdateManager {
     private const val GITHUB_REPO = "SUBHOJITPAUL797/DASMO-CYBER-CAPTURE"
     private const val GITHUB_API_URL = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 
-    suspend fun checkForUpdates(currentVersion: String = "1.0"): AppUpdateInfo = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdates(currentVersion: String = "1.0.0"): AppUpdateInfo = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
             val url = URL(GITHUB_API_URL)

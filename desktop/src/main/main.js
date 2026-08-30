@@ -276,8 +276,19 @@ ipcMain.handle('driver:install-deps', async () => {
 
 ipcMain.handle('driver:install-audio', () => {
     const { exec } = require('child_process');
-    const batPath = path.join(__dirname, '../../drivers/install_virtual_audio.bat');
-    exec(`cmd.exe /c start "" "${batPath}"`);
+    const psScript = `
+        $zip = Join-Path $env:TEMP 'VBCABLE_Driver_Pack43.zip';
+        $dest = Join-Path $env:TEMP 'VBCABLE_Driver';
+        Write-Host 'Downloading Virtual Audio Driver...';
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+        Invoke-WebRequest -Uri 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip' -OutFile $zip;
+        Expand-Archive -Path $zip -DestinationPath $dest -Force;
+        Start-Process (Join-Path $dest 'VBCABLE_Setup_x64.exe') -Verb RunAs;
+    `;
+    const cleanCmd = psScript.replace(/\r?\n/g, ' ');
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${cleanCmd}"`, (err) => {
+        if (err) console.warn('[Install Audio Driver]', err);
+    });
     return true;
 });
 

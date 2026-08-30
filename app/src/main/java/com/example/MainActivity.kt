@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                                 onToggleGrid = { viewModel.toggleGrid() },
                                 onAddDevice = { name, ip -> viewModel.addPairedDevice(name, ip) },
                                 onRemoveDevice = { viewModel.removePairedDevice(it) },
-                                onCheckUpdatesClick = { viewModel.checkAppUpdates() },
+                                onCheckUpdatesClick = { viewModel.checkAppUpdates(isManual = true) },
                                 onBackClick = { navController.popBackStack() }
                             )
                         }
