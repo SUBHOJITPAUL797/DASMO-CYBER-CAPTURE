@@ -118,9 +118,42 @@ class HardwareDriverBridge extends EventEmitter {
         this.emit('status_change', { status: 'idle', message: 'Virtual camera bridge stopped' });
     }
 
+    startAudioBridge(phoneIp) {
+        if (this.audioProcess) {
+            this.stopAudioBridge();
+        }
+
+        const scriptPath = path.join(__dirname, '../../drivers/dasmo_audio_bridge.py');
+        if (!fs.existsSync(scriptPath)) return;
+
+        try {
+            this.audioProcess = spawn('python', [scriptPath, phoneIp], {
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            this.audioProcess.stdout.on('data', (d) => {
+                console.log('[Audio Bridge]', d.toString());
+            });
+
+            this.audioProcess.on('exit', () => {
+                this.audioProcess = null;
+            });
+        } catch (e) {
+            console.warn('[Audio Bridge Error]', e.message);
+        }
+    }
+
+    stopAudioBridge() {
+        if (this.audioProcess) {
+            try { this.audioProcess.kill('SIGTERM'); } catch (_) {}
+            this.audioProcess = null;
+        }
+    }
+
     getStatus() {
         return {
             isActive: this.isActive,
+            isAudioActive: !!this.audioProcess,
             status: this.status,
             deviceIp: this.currentDeviceIp
         };

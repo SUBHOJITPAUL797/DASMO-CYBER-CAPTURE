@@ -247,6 +247,29 @@ function initHardwareControls() {
         sendControl('routing', 'EARPIECE');
     });
 
+    let isAudioRelayRunning = false;
+    document.getElementById('btnStartAudioRelay')?.addEventListener('click', () => {
+        if (!activeDevice) {
+            alert('Please connect to your phone first.');
+            return;
+        }
+        isAudioRelayRunning = !isAudioRelayRunning;
+        const btn = document.getElementById('btnStartAudioRelay');
+        const lbl = document.getElementById('lblAudioRelayBtn');
+
+        if (isAudioRelayRunning) {
+            window.dasmoAPI?.startAudioBridge(activeDevice.ip);
+            btn.style.background = 'var(--cyan)';
+            btn.style.color = '#000';
+            lbl.innerText = 'Stop PC ➔ Phone Speaker Relay';
+        } else {
+            window.dasmoAPI?.stopAudioBridge();
+            btn.style.background = 'transparent';
+            btn.style.color = 'var(--cyan)';
+            lbl.innerText = 'Start PC ➔ Phone Speaker Relay';
+        }
+    });
+
     // Virtual Camera Driver Button
     document.getElementById('btnStartDriver')?.addEventListener('click', () => {
         toggleVirtualCameraDriver();

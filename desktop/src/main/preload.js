@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
     installAudioDriver: () => ipcRenderer.invoke('driver:install-audio'),
     startVirtualCamera: (phoneIp) => ipcRenderer.invoke('driver:start-cam', phoneIp),
     stopVirtualCamera: () => ipcRenderer.invoke('driver:stop-cam'),
+    startAudioBridge: (phoneIp) => ipcRenderer.invoke('driver:start-audio-bridge', phoneIp),
+    stopAudioBridge: () => ipcRenderer.invoke('driver:stop-audio-bridge'),
     getDriverStatus: () => ipcRenderer.invoke('driver:get-status'),
     onDriverStatusChange: (callback) => {
         const handler = (event, data) => callback(data);

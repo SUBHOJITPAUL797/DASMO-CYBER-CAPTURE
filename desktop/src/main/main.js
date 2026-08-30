@@ -291,6 +291,16 @@ ipcMain.handle('driver:stop-cam', () => {
     return true;
 });
 
+ipcMain.handle('driver:start-audio-bridge', (event, phoneIp) => {
+    driverBridge.startAudioBridge(phoneIp);
+    return true;
+});
+
+ipcMain.handle('driver:stop-audio-bridge', () => {
+    driverBridge.stopAudioBridge();
+    return true;
+});
+
 ipcMain.handle('driver:get-status', () => {
     return driverBridge.getStatus();
 });
