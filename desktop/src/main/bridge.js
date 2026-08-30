@@ -4,6 +4,36 @@ const fs = require('fs');
 const { app } = require('electron');
 const EventEmitter = require('events');
 
+function resolvePythonExecutable() {
+    const candidates = [
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python314', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python313', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python312', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python310', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python39', 'python.exe'),
+        'C:\\Program Files\\Python314\\python.exe',
+        'C:\\Program Files\\Python313\\python.exe',
+        'C:\\Program Files\\Python312\\python.exe',
+        'C:\\Program Files\\Python311\\python.exe',
+        'C:\\Program Files\\Python310\\python.exe',
+        'C:\\Python314\\python.exe',
+        'C:\\Python313\\python.exe',
+        'C:\\Python312\\python.exe',
+        'C:\\Python311\\python.exe',
+        'C:\\Python310\\python.exe',
+        'C:\\WINDOWS\\py.exe'
+    ];
+
+    for (const p of candidates) {
+        if (fs.existsSync(p)) {
+            return p;
+        }
+    }
+
+    return 'python';
+}
+
 function getDriverScriptPath(scriptName) {
     if (app && app.isPackaged) {
         const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'drivers', scriptName);
@@ -24,28 +54,32 @@ class HardwareDriverBridge extends EventEmitter {
         this.isActive = false;
         this.currentDeviceIp = null;
         this.status = 'idle'; // idle | launching | running | error
+        this.pythonPath = resolvePythonExecutable();
     }
 
     checkEnvironment() {
+        this.pythonPath = resolvePythonExecutable();
+        const pythonCmd = `"${this.pythonPath}"`;
+
         return new Promise((resolve) => {
-            exec('python --version', (err, stdout, stderr) => {
+            exec(`${pythonCmd} --version`, (err, stdout, stderr) => {
                 if (err) {
                     return resolve({
                         hasPython: false,
                         version: null,
-                        message: 'Python not detected in PATH'
+                        message: 'Python not detected. Please install Python 3.10+.'
                     });
                 }
                 const versionStr = (stdout || stderr || '').trim();
                 
                 // Check opencv, pyvirtualcam, and sounddevice
-                exec('python -c "import cv2, pyvirtualcam, sounddevice; print(\'OK\')"', (pkgErr, pkgStdout) => {
+                exec(`${pythonCmd} -c "import cv2, pyvirtualcam, sounddevice; print('OK')"`, (pkgErr, pkgStdout) => {
                     const hasPackages = !pkgErr && pkgStdout.includes('OK');
                     resolve({
                         hasPython: true,
                         version: versionStr,
                         hasPackages: hasPackages,
-                        message: hasPackages ? '✓ Virtual Camera & Audio Drivers Ready' : 'Dependencies need installation'
+                        message: hasPackages ? '✓ Virtual Camera & Audio Drivers Ready' : 'Dependencies ready to install (opencv-python, pyvirtualcam, sounddevice)'
                     });
                 });
             });
@@ -53,9 +87,12 @@ class HardwareDriverBridge extends EventEmitter {
     }
 
     installDependencies() {
+        this.pythonPath = resolvePythonExecutable();
+        const pythonCmd = `"${this.pythonPath}"`;
+
         return new Promise((resolve, reject) => {
-            // Use python -m pip to avoid 'pip not found' error
-            const child = exec('python -m pip install --quiet opencv-python pyvirtualcam sounddevice numpy', (err, stdout, stderr) => {
+            // Use resolved python path with -m pip
+            const child = exec(`${pythonCmd} -m pip install --quiet opencv-python pyvirtualcam sounddevice numpy`, (err, stdout, stderr) => {
                 if (err) {
                     return reject(new Error(stderr || err.message));
                 }
@@ -69,13 +106,13 @@ class HardwareDriverBridge extends EventEmitter {
             this.stopVirtualCamera();
         }
 
+        this.pythonPath = resolvePythonExecutable();
         this.currentDeviceIp = phoneIp;
         this.status = 'launching';
         this.emit('status_change', { status: this.status, message: 'Launching DASMO Virtual Camera Bridge...' });
 
         const scriptPath = getDriverScriptPath('dasmo_virtualcam.py');
 
-        // Check if driver script exists
         if (!fs.existsSync(scriptPath)) {
             this.status = 'error';
             this.emit('status_change', { status: 'error', message: `Driver script not found: ${scriptPath}` });
@@ -83,7 +120,7 @@ class HardwareDriverBridge extends EventEmitter {
         }
 
         try {
-            this.bridgeProcess = spawn('python', [scriptPath, phoneIp], {
+            this.bridgeProcess = spawn(this.pythonPath, [scriptPath, phoneIp], {
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
@@ -138,11 +175,12 @@ class HardwareDriverBridge extends EventEmitter {
             this.stopAudioBridge();
         }
 
+        this.pythonPath = resolvePythonExecutable();
         const scriptPath = getDriverScriptPath('dasmo_audio_bridge.py');
         if (!fs.existsSync(scriptPath)) return;
 
         try {
-            this.audioProcess = spawn('python', [scriptPath, phoneIp], {
+            this.audioProcess = spawn(this.pythonPath, [scriptPath, phoneIp], {
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
@@ -175,4 +213,4 @@ class HardwareDriverBridge extends EventEmitter {
     }
 }
 
-module.exports = { HardwareDriverBridge, getDriverScriptPath };
+module.exports = { HardwareDriverBridge, getDriverScriptPath, resolvePythonExecutable };
