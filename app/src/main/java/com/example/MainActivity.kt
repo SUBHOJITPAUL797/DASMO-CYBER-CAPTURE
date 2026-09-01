@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
                 val viewModel: CyberCaptureViewModel = viewModel()
                 val config by viewModel.config.collectAsState()
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
+                val updateInfo by viewModel.appUpdateInfo.collectAsState()
 
                 Scaffold(
                     modifier = Modifier
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
                             CyberSettingsScreen(
                                 config = config,
                                 pairedDevices = pairedDevices,
+                                updateInfo = updateInfo,
                                 onResolutionChanged = { viewModel.setResolution(it) },
                                 onToggleMirror = { viewModel.toggleMirror() },
                                 onToggleGrid = { viewModel.toggleGrid() },

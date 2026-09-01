@@ -35,11 +35,23 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import com.example.ui.components.CyberControlDock
 import com.example.ui.components.CyberTelemetryBar
 import com.example.ui.components.CyberViewfinder
 import com.example.ui.theme.CyberBlack
 import com.example.ui.theme.CyberCyan
+import com.example.ui.theme.CyberGreen
 import com.example.ui.theme.CyberSurface
 import com.example.ui.theme.CyberTextPrimary
 import com.example.ui.theme.CyberTextSecondary
@@ -144,6 +156,53 @@ fun CyberDashboardScreen(
                         stats = stats,
                         config = config
                     )
+
+                    // In-App OTA Update Prompt Banner
+                    AnimatedVisibility(
+                        visible = updateInfo.isUpdateAvailable,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Surface(
+                            onClick = { showUpdateModal = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = CyberGreen.copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, CyberGreen.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth().testTag("banner_update_available")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdate,
+                                        contentDescription = null,
+                                        tint = CyberGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "NEW UPDATE v${updateInfo.latestVersion} AVAILABLE",
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CyberGreen
+                                    )
+                                }
+                                Text(
+                                    text = "TAP TO UPDATE →",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyberCyan
+                                )
+                            }
+                        }
+                    }
 
                     // Main Viewfinder
                     Box(

@@ -77,6 +77,7 @@ import com.example.ui.theme.CyberTextSecondary
 fun CyberSettingsScreen(
     config: CyberConfig,
     pairedDevices: List<PairedDevice>,
+    updateInfo: com.example.updater.AppUpdateInfo = com.example.updater.AppUpdateInfo(),
     onResolutionChanged: (StreamResolution) -> Unit,
     onToggleMirror: () -> Unit,
     onToggleGrid: () -> Unit,
@@ -86,6 +87,7 @@ fun CyberSettingsScreen(
     onBackClick: () -> Unit
 ) {
     var showAddDeviceDialog by remember { mutableStateOf(false) }
+    var showUpdateModal by remember { mutableStateOf(false) }
     var newDeviceName by remember { mutableStateOf("") }
     var newDeviceIp by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -280,20 +282,37 @@ fun CyberSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Current Version: v1.0", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
+                            Column {
+                                Text("Current Version: v1.0.0", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary, fontWeight = FontWeight.Bold)
+                                Text(if (updateInfo.isUpdateAvailable) "Latest: v${updateInfo.latestVersion} (Update Available)" else "System is up to date", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberTextMuted)
+                            }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(CyberGreen.copy(alpha = 0.2f))
+                                    .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.2f) else CyberCyan.copy(alpha = 0.15f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("STABLE", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = CyberGreen, fontWeight = FontWeight.Bold)
+                                Text(if (updateInfo.isUpdateAvailable) "UPDATE" else "LATEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberCyan, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (updateInfo.isUpdateAvailable) {
+                            Button(
+                                onClick = { showUpdateModal = true },
+                                modifier = Modifier.fillMaxWidth().testTag("btn_view_update_details"),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = CyberBlack)
+                            ) {
+                                Text("🚀 View Update & Changelog (v${updateInfo.latestVersion})", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
 
                         Button(
                             onClick = {
                                 onCheckUpdatesClick?.invoke()
+                                if (updateInfo.isUpdateAvailable) {
+                                    showUpdateModal = true
+                                }
                             },
                             modifier = Modifier.fillMaxWidth().testTag("btn_check_updates_settings"),
                             shape = RoundedCornerShape(8.dp),
@@ -323,6 +342,13 @@ fun CyberSettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showUpdateModal && updateInfo.isUpdateAvailable) {
+        CyberUpdateModal(
+            updateInfo = updateInfo,
+            onDismiss = { showUpdateModal = false }
+        )
     }
 
     if (showAddDeviceDialog) {
