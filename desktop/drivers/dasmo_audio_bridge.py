@@ -18,8 +18,15 @@ except ImportError:
 
 import urllib.request
 
-PHONE_IP = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
-PORT = 8080
+RAW_ARG = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
+if ":" in RAW_ARG:
+    parts = RAW_ARG.split(":")
+    PHONE_IP = parts[0].replace("http://", "").replace("https://", "").strip()
+    PORT = int(parts[1].strip())
+else:
+    PHONE_IP = RAW_ARG.replace("http://", "").replace("https://", "").strip()
+    PORT = 8080
+
 SAMPLE_RATE = 48000
 CHANNELS = 1
 BLOCK_SIZE = 1024

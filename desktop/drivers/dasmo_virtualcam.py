@@ -23,9 +23,17 @@ except ImportError:
     print("[ERROR] pyvirtualcam not installed. Run: pip install pyvirtualcam")
     sys.exit(1)
 
-# Accept IP from command line argument if provided, otherwise default to localhost
-PHONE_IP = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
-STREAM_URL = f"http://{PHONE_IP}:8080/video_feed"
+# Accept IP/Port from command line argument if provided
+RAW_ARG = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
+if ":" in RAW_ARG:
+    parts = RAW_ARG.split(":")
+    PHONE_IP = parts[0].replace("http://", "").replace("https://", "").strip()
+    PORT = parts[1].strip()
+else:
+    PHONE_IP = RAW_ARG.replace("http://", "").replace("https://", "").strip()
+    PORT = "8080"
+
+STREAM_URL = f"http://{PHONE_IP}:{PORT}/video_feed"
 
 print("==========================================================")
 print("  🚀 DASMO CYBER CAPTURE // REAL-TIME DEVICE DRIVER       ")

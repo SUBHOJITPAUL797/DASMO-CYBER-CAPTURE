@@ -82,6 +82,7 @@
 
                 <!-- 16:9 Viewfinder -->
                 <div class="viewfinder-wrapper">
+                    <canvas class="video-stream-img" id="videoCanvas" style="display: none; width: 100%; height: 100%; object-fit: contain;"></canvas>
                     <img class="video-stream-img" id="videoFeedImg" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'><rect width='640' height='360' fill='%23080c14'/><text x='50%25' y='50%25' font-family='monospace' font-size='14' fill='%2300e5ff' text-anchor='middle' dominant-baseline='middle'>[ DASMO CYBER CAPTURE // WAITING FOR AIR LINK FEED ]</text></svg>" alt="Camera Feed" />
                     
                     <div class="viewfinder-hud">
@@ -93,6 +94,7 @@
                             </div>
                         </div>
                         <div class="hud-bottom">
+                            <span id="hudLatency" style="color: var(--green);">LATENCY: &lt;25ms (Real-Time)</span>
                             <span id="hudLinkQuality">LINK: 100% AIR LINK WI-FI</span>
                             <span id="hudZoomLabel">ZOOM: 1.0x</span>
                         </div>
@@ -286,11 +288,15 @@
                 <div style="font-family: var(--font-cyber); font-size: 13px; color: var(--cyan); font-weight: 700;">MANUAL PHONE CONNECTION</div>
                 <button class="hud-btn" id="btnCloseModal">✕</button>
             </div>
-            <p style="font-size: 12px; color: var(--text-secondary);">Enter the IP address displayed on your phone's screen:</p>
-            <input type="text" id="inputManualIp" placeholder="e.g. 192.168.1.50" style="background: var(--surface-card); border: 1px solid var(--cyan); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-family: var(--font-mono); font-size: 14px;">
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0;">Enter the IP address displayed on your phone:</p>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="inputManualIp" placeholder="e.g. 192.168.1.50 or 192.168.43.1" style="flex: 3; background: var(--surface-card); border: 1px solid var(--cyan); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-family: var(--font-mono); font-size: 14px;">
+                <input type="number" id="inputManualPort" value="8080" placeholder="8080" style="flex: 1; background: var(--surface-card); border: 1px solid var(--cyan); color: var(--text-primary); padding: 10px 14px; border-radius: 8px; font-family: var(--font-mono); font-size: 14px;">
+            </div>
+            <div id="manualStatusText" style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); min-height: 18px; margin: 4px 0;"></div>
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
                 <button class="hud-btn" id="btnCancelManual">Cancel</button>
-                <button class="hud-btn" style="background: var(--cyan); color: #000;" id="btnSubmitManual">Connect</button>
+                <button class="hud-btn" style="background: var(--cyan); color: #000;" id="btnSubmitManual">Connect & Verify</button>
             </div>
         </div>
     </div>

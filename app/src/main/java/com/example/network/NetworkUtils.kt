@@ -32,22 +32,70 @@ object NetworkUtils {
                 }
             }
 
-            // Fallback: scan active network interfaces
+            // Scan active network interfaces with prioritized matching (wlan, ap/hotspot, rndis, tun)
             val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            var hotspotIp: String? = null
+            var tetherIp: String? = null
+            var fallbackIp: String? = null
+
             for (intf in interfaces) {
                 if (intf.isLoopback || !intf.isUp) continue
+                val name = intf.name.lowercase()
                 val addrs = Collections.list(intf.inetAddresses)
                 for (addr in addrs) {
                     if (!addr.isLoopbackAddress && addr is Inet4Address) {
-                        val host = addr.hostAddress
-                        if (!host.isNullOrEmpty() && !host.startsWith("127.")) {
-                            return host
+                        val host = addr.hostAddress ?: continue
+                        if (host.startsWith("127.")) continue
+
+                        if (name.startsWith("wlan")) {
+                            return host // Primary Wi-Fi interface
+                        } else if (name.startsWith("ap") || name.startsWith("softap") || host.startsWith("192.168.43.")) {
+                            hotspotIp = host // Hotspot interface
+                        } else if (name.startsWith("rndis") || name.startsWith("usb") || host.startsWith("192.168.42.")) {
+                            tetherIp = host // USB / RNDIS tethering
+                        } else if (fallbackIp == null) {
+                            fallbackIp = host
+                        }
+                    }
+                }
+            }
+
+            if (!hotspotIp.isNullOrEmpty()) return hotspotIp
+            if (!tetherIp.isNullOrEmpty()) return tetherIp
+            if (!fallbackIp.isNullOrEmpty()) return fallbackIp
+
+        } catch (_: Exception) {}
+        return "127.0.0.1"
+    }
+
+    fun getAllLocalIpAddresses(): List<Pair<String, String>> {
+        val result = mutableListOf<Pair<String, String>>()
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                if (intf.isLoopback || !intf.isUp) continue
+                val name = intf.name.lowercase()
+                val label = when {
+                    name.startsWith("wlan") -> "Wi-Fi LAN"
+                    name.startsWith("ap") || name.startsWith("softap") -> "Hotspot AP"
+                    name.startsWith("rndis") || name.startsWith("usb") -> "USB Tether"
+                    name.startsWith("tun") || name.startsWith("tap") -> "VPN Tunnel"
+                    name.startsWith("eth") -> "Ethernet"
+                    else -> "Interface ($name)"
+                }
+
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        val host = addr.hostAddress ?: continue
+                        if (!host.startsWith("127.")) {
+                            result.add(label to host)
                         }
                     }
                 }
             }
         } catch (_: Exception) {}
-        return "127.0.0.1"
+        return result
     }
 
     fun getWifiSsid(context: Context): String {

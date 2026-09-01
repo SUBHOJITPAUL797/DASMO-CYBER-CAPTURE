@@ -94,50 +94,151 @@ function initDeviceDiscovery() {
 
     // Manual Modal
     const modal = document.getElementById('manualConnectModal');
-    document.getElementById('btnManualConnect')?.addEventListener('click', () => modal.classList.add('open'));
+    const statusEl = document.getElementById('manualStatusText');
+
+    document.getElementById('btnManualConnect')?.addEventListener('click', () => {
+        if (statusEl) statusEl.innerText = '';
+        modal.classList.add('open');
+    });
     document.getElementById('btnCloseModal')?.addEventListener('click', () => modal.classList.remove('open'));
     document.getElementById('btnCancelManual')?.addEventListener('click', () => modal.classList.remove('open'));
 
-    document.getElementById('btnSubmitManual')?.addEventListener('click', () => {
-        const ip = document.getElementById('inputManualIp').value.trim();
-        if (ip) {
+    document.getElementById('btnSubmitManual')?.addEventListener('click', async () => {
+        const rawIp = document.getElementById('inputManualIp').value.trim();
+        const rawPort = document.getElementById('inputManualPort')?.value.trim() || '8080';
+        const submitBtn = document.getElementById('btnSubmitManual');
+
+        if (!rawIp) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: var(--red);">Please enter an IP address.</span>';
+            return;
+        }
+
+        const { ip, port } = parseManualInput(rawIp, rawPort);
+        if (!ip) {
+            if (statusEl) statusEl.innerHTML = '<span style="color: var(--red);">Invalid IP address format.</span>';
+            return;
+        }
+
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--cyan);">Probing http://${ip}:${port}...</span>`;
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const res = await fetch(`http://${ip}:${port}/status.json?_t=${Date.now()}`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const data = await res.json();
+                const dev = {
+                    id: `${ip}:${port}`,
+                    ip: ip,
+                    port: port,
+                    name: data.app || `DASMO Phone (${ip})`,
+                    streamUrl: `http://${ip}:${port}/video_feed`,
+                    snapshotUrl: `http://${ip}:${port}/snapshot.jpg`,
+                    audioUrl: `http://${ip}:${port}/audio_feed`,
+                    speakerUrl: `http://${ip}:${port}/speaker_feed`,
+                    controlUrl: `http://${ip}:${port}/api/control`
+                };
+
+                saveManualDevice(dev);
+                modal.classList.remove('open');
+                if (statusEl) statusEl.innerText = '';
+                connectToDevice(dev);
+            } else {
+                throw new Error(`Server returned HTTP ${res.status}`);
+            }
+        } catch (err) {
+            // Fallback: connect anyway in case status.json is blocked but video_feed works
             const dev = {
-                id: `${ip}:8080`,
+                id: `${ip}:${port}`,
                 ip: ip,
-                port: 8080,
-                name: 'DASMO Phone (Manual)',
-                streamUrl: `http://${ip}:8080/video_feed`,
-                snapshotUrl: `http://${ip}:8080/snapshot.jpg`,
-                audioUrl: `http://${ip}:8080/audio_feed`,
-                speakerUrl: `http://${ip}:8080/speaker_feed`,
-                controlUrl: `http://${ip}:8080/api/control`
+                port: port,
+                name: `DASMO Phone (${ip})`,
+                streamUrl: `http://${ip}:${port}/video_feed`,
+                snapshotUrl: `http://${ip}:${port}/snapshot.jpg`,
+                audioUrl: `http://${ip}:${port}/audio_feed`,
+                speakerUrl: `http://${ip}:${port}/speaker_feed`,
+                controlUrl: `http://${ip}:${port}/api/control`
             };
+            saveManualDevice(dev);
             modal.classList.remove('open');
+            if (statusEl) statusEl.innerText = '';
             connectToDevice(dev);
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
         }
     });
+}
+
+function parseManualInput(rawIp, rawPort) {
+    let clean = (rawIp || '').trim();
+    clean = clean.replace(/^https?:\/\//i, '');
+    clean = clean.replace(/\/.*$/, ''); // strip any trailing path
+
+    let port = parseInt(rawPort, 10) || 8080;
+
+    if (clean.includes(':')) {
+        const parts = clean.split(':');
+        clean = parts[0].trim();
+        const p = parseInt(parts[1], 10);
+        if (p > 0 && p <= 65535) port = p;
+    }
+
+    return { ip: clean, port: port };
+}
+
+function getSavedManualDevices() {
+    try {
+        const raw = localStorage.getItem('dasmo_manual_devices');
+        return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveManualDevice(dev) {
+    try {
+        const list = getSavedManualDevices().filter(d => d.id !== dev.id);
+        list.unshift(dev);
+        localStorage.setItem('dasmo_manual_devices', JSON.stringify(list.slice(0, 10)));
+    } catch (_) {}
 }
 
 async function renderDiscoveredDevices() {
     const listEl = document.getElementById('deviceList');
     if (!listEl) return;
 
-    const devices = window.dasmoAPI ? await window.dasmoAPI.getDiscoveredDevices() : [];
+    const mdnsDevices = window.dasmoAPI ? await window.dasmoAPI.getDiscoveredDevices() : [];
+    const manualDevices = getSavedManualDevices();
 
-    if (devices.length === 0) {
-        listEl.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); padding: 8px;">No phone found yet. Ensure phone app is active on same Wi-Fi.</div>';
+    // Merge without duplicates
+    const allDevices = [...mdnsDevices];
+    manualDevices.forEach(m => {
+        if (!allDevices.some(d => d.ip === m.ip && d.port === m.port)) {
+            allDevices.push(m);
+        }
+    });
+
+    if (allDevices.length === 0) {
+        listEl.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); padding: 8px;">No phone found yet. Click ➕ Manual IP Pair or ensure phone app is open.</div>';
         return;
     }
 
     listEl.innerHTML = '';
-    devices.forEach(dev => {
+    allDevices.forEach(dev => {
         const isCurrent = activeDevice && activeDevice.id === dev.id;
+        const isManual = !mdnsDevices.some(d => d.id === dev.id);
         const card = document.createElement('div');
         card.className = `device-card ${isCurrent ? 'active' : ''}`;
         card.innerHTML = `
             <div class="device-card-header">
                 <span class="device-name">${dev.name}</span>
-                <span class="device-badge ${isCurrent ? 'badge-connected' : 'badge-available'}">${isCurrent ? 'CONNECTED' : 'AIR LINK'}</span>
+                <span class="device-badge ${isCurrent ? 'badge-connected' : 'badge-available'}">${isCurrent ? 'CONNECTED' : (isManual ? 'MANUAL IP' : 'AIR LINK')}</span>
             </div>
             <div class="device-meta">
                 <span>${dev.ip}:${dev.port}</span>
@@ -158,13 +259,18 @@ function connectToDevice(device) {
     document.getElementById('activePhoneIp').innerText = `${device.ip}:${device.port}`;
 
     const livePill = document.getElementById('livePill');
-    livePill.className = 'live-indicator live-on';
+    if (livePill) livePill.className = 'live-indicator live-on';
     document.getElementById('pulseDot').style.background = 'var(--green)';
     document.getElementById('txtLiveStatus').innerText = 'AIR LINK ACTIVE';
 
-    // Start Live Stream Viewfinder
+    // Start Live Stream Viewfinder with Cache-Buster & Real-Time Sync
     const videoImg = document.getElementById('videoFeedImg');
-    videoImg.src = device.streamUrl;
+    if (videoImg) {
+        videoImg.src = '';
+        setTimeout(() => {
+            videoImg.src = `${device.streamUrl}?_t=${Date.now()}`;
+        }, 50);
+    }
 
     renderDiscoveredDevices();
     startStatusPolling();

@@ -6,6 +6,8 @@ import com.example.model.StreamResolution
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -18,6 +20,7 @@ import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -36,7 +39,7 @@ class CyberStreamServer(
 
     private val connectedClientsCount = AtomicInteger(0)
     private val totalBytesSent = AtomicLong(0)
-    private val activeMjpegStreams = CopyOnWriteArrayList<OutputStream>()
+    private val activeMjpegChannels = ConcurrentHashMap<OutputStream, Channel<ByteArray>>()
     private val activeAudioStreams = CopyOnWriteArrayList<OutputStream>()
 
     private val _connectedClientsFlow = MutableStateFlow(0)
@@ -54,27 +57,10 @@ class CyberStreamServer(
     fun updateFrame(jpegBytes: ByteArray) {
         latestJpegFrame = jpegBytes
 
-        // Broadcast to all active MJPEG stream clients
-        if (activeMjpegStreams.isNotEmpty()) {
-            val header = "--cyberframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpegBytes.size}\r\n\r\n".toByteArray()
-            val footer = "\r\n".toByteArray()
-
-            val iterator = activeMjpegStreams.iterator()
-            while (iterator.hasNext()) {
-                val stream = iterator.next()
-                try {
-                    stream.write(header)
-                    stream.write(jpegBytes)
-                    stream.write(footer)
-                    stream.flush()
-
-                    val bytes = header.size + jpegBytes.size + footer.size
-                    totalBytesSent.addAndGet(bytes.toLong())
-                    bytesInLastSecond.addAndGet(bytes.toLong())
-                } catch (_: Exception) {
-                    activeMjpegStreams.remove(stream)
-                    updateClientCount()
-                }
+        // Broadcast non-blocking to all active MJPEG stream clients (drops old frames on overflow)
+        if (activeMjpegChannels.isNotEmpty()) {
+            for ((_, channel) in activeMjpegChannels) {
+                channel.trySend(jpegBytes)
             }
         }
 
@@ -169,7 +155,7 @@ class CyberStreamServer(
                 }
 
                 when {
-                    // MJPEG Video Stream
+                    // MJPEG Video Stream (Ultra-Low Latency Conflated Stream)
                     uri.startsWith("/video_feed") || uri.startsWith("/mjpeg") || uri.startsWith("/live.mjpg") -> {
                         socket.soTimeout = 0 // Infinite timeout for video stream
                         val responseHeader = (
@@ -185,13 +171,33 @@ class CyberStreamServer(
                         outputStream.write(responseHeader)
                         outputStream.flush()
 
-                        activeMjpegStreams.add(outputStream)
+                        val channel = Channel<ByteArray>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+                        activeMjpegChannels[outputStream] = channel
                         updateClientCount()
 
-                        // Keep socket alive while streaming
-                        while (socket.isConnected && !socket.isClosed && isRunning.get()) {
-                            kotlinx.coroutines.delay(500)
+                        try {
+                            while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                val frame = channel.receiveCatching().getOrNull() ?: break
+                                val header = "--cyberframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n".toByteArray()
+                                val footer = "\r\n".toByteArray()
+
+                                outputStream.write(header)
+                                outputStream.write(frame)
+                                outputStream.write(footer)
+                                outputStream.flush()
+
+                                val bytes = header.size + frame.size + footer.size
+                                totalBytesSent.addAndGet(bytes.toLong())
+                                bytesInLastSecond.addAndGet(bytes.toLong())
+                            }
+                        } catch (_: Exception) {
+                        } finally {
+                            activeMjpegChannels.remove(outputStream)
+                            channel.close()
+                            updateClientCount()
+                            try { socket.close() } catch (_: Exception) {}
                         }
+                        return@withContext
                     }
 
                     // Single Frame Snapshot
@@ -256,7 +262,7 @@ class CyberStreamServer(
                             put("clients", connectedClientsCount.get())
                             put("bitrate_kbps", _bitrateKbpsFlow.value)
                             put("total_bytes", totalBytesSent.get())
-                            put("active_mjpeg_streams", activeMjpegStreams.size)
+                            put("active_mjpeg_streams", activeMjpegChannels.size)
                         }.toString()
 
                         val response = (
@@ -360,7 +366,7 @@ class CyberStreamServer(
             } catch (_: Exception) {
             } finally {
                 try {
-                    if (!activeMjpegStreams.contains(socket.getOutputStream())) {
+                    if (!activeMjpegChannels.containsKey(socket.getOutputStream())) {
                         socket.close()
                     }
                 } catch (_: Exception) {}
@@ -369,7 +375,7 @@ class CyberStreamServer(
     }
 
     private fun updateClientCount() {
-        val count = activeMjpegStreams.size
+        val count = activeMjpegChannels.size
         connectedClientsCount.set(count)
         _connectedClientsFlow.value = count
     }
@@ -381,10 +387,11 @@ class CyberStreamServer(
         } catch (_: Exception) {}
         serverSocket = null
 
-        activeMjpegStreams.forEach {
-            try { it.close() } catch (_: Exception) {}
+        activeMjpegChannels.forEach { (stream, channel) ->
+            try { channel.close() } catch (_: Exception) {}
+            try { stream.close() } catch (_: Exception) {}
         }
-        activeMjpegStreams.clear()
+        activeMjpegChannels.clear()
         updateClientCount()
         serverJob?.cancel()
         serverJob = null
