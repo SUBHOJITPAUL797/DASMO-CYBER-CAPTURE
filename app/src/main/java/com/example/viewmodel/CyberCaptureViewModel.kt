@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 
 class CyberCaptureViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,6 +63,11 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
 
     private val _appUpdateInfo = MutableStateFlow(com.example.updater.AppUpdateInfo())
     val appUpdateInfo: StateFlow<com.example.updater.AppUpdateInfo> = _appUpdateInfo.asStateFlow()
+
+    private val _downloadState = MutableStateFlow<com.example.updater.UpdateDownloadState>(com.example.updater.UpdateDownloadState.Idle)
+    val downloadState: StateFlow<com.example.updater.UpdateDownloadState> = _downloadState.asStateFlow()
+
+    private var downloadJob: Job? = null
 
     private var cameraManager: CyberCameraManager? = null
     private var audioEngine = CyberAudioEngine(application)
@@ -102,6 +108,57 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                 onComplete?.invoke(info)
             }
         }
+    }
+
+    fun startInAppDownload(apkUrl: String) {
+        if (apkUrl.isEmpty()) {
+            _toastMessage.value = "No APK download URL found for this release."
+            return
+        }
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch(Dispatchers.IO) {
+            _downloadState.value = com.example.updater.UpdateDownloadState.Downloading(0, 0, 0)
+            val file = com.example.updater.CyberUpdateManager.downloadApk(
+                context = getApplication(),
+                apkUrl = apkUrl
+            ) { downloaded, total, percent ->
+                _downloadState.value = com.example.updater.UpdateDownloadState.Downloading(percent, downloaded, total)
+            }
+
+            withContext(Dispatchers.Main) {
+                if (file != null && file.exists()) {
+                    _downloadState.value = com.example.updater.UpdateDownloadState.Downloaded(file)
+                    _toastMessage.value = "Download complete! Launching installer..."
+                    installDownloadedApk(file)
+                } else {
+                    _downloadState.value = com.example.updater.UpdateDownloadState.Error("Download failed. Please check network.")
+                    _toastMessage.value = "Download failed. Please check your internet connection."
+                }
+            }
+        }
+    }
+
+    fun installDownloadedApk(file: File? = null) {
+        val targetFile = file ?: (_downloadState.value as? com.example.updater.UpdateDownloadState.Downloaded)?.apkFile
+        if (targetFile != null && targetFile.exists()) {
+            val launched = com.example.updater.CyberUpdateManager.installApk(getApplication(), targetFile)
+            if (!launched) {
+                _toastMessage.value = "Please allow installation from this app in Android Settings"
+            }
+        } else {
+            _toastMessage.value = "Installer file not found. Please re-download."
+        }
+    }
+
+    fun cancelInAppDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        _downloadState.value = com.example.updater.UpdateDownloadState.Idle
+        _toastMessage.value = "Download cancelled"
+    }
+
+    fun resetDownloadState() {
+        _downloadState.value = com.example.updater.UpdateDownloadState.Idle
     }
 
     fun initCameraManager(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {

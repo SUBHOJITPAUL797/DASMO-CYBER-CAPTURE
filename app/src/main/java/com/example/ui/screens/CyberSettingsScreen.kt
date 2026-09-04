@@ -78,12 +78,16 @@ fun CyberSettingsScreen(
     config: CyberConfig,
     pairedDevices: List<PairedDevice>,
     updateInfo: com.example.updater.AppUpdateInfo = com.example.updater.AppUpdateInfo(),
+    downloadState: com.example.updater.UpdateDownloadState = com.example.updater.UpdateDownloadState.Idle,
     onResolutionChanged: (StreamResolution) -> Unit,
     onToggleMirror: () -> Unit,
     onToggleGrid: () -> Unit,
     onAddDevice: (String, String) -> Unit,
     onRemoveDevice: (PairedDevice) -> Unit,
     onCheckUpdatesClick: (() -> Unit)? = null,
+    onStartDownload: ((String) -> Unit)? = null,
+    onInstallApk: ((java.io.File?) -> Unit)? = null,
+    onCancelDownload: (() -> Unit)? = null,
     onBackClick: () -> Unit
 ) {
     var showAddDeviceDialog by remember { mutableStateOf(false) }
@@ -353,6 +357,10 @@ fun CyberSettingsScreen(
     if (showUpdateModal && updateInfo.isUpdateAvailable) {
         CyberUpdateModal(
             updateInfo = updateInfo,
+            downloadState = downloadState,
+            onStartDownload = { onStartDownload?.invoke(it) },
+            onInstallApk = { onInstallApk?.invoke(it) },
+            onCancelDownload = { onCancelDownload?.invoke() },
             onDismiss = { showUpdateModal = false }
         )
     }

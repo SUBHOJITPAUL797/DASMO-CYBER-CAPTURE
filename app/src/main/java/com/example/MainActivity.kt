@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
                 val updateInfo by viewModel.appUpdateInfo.collectAsState()
                 val toastMessage by viewModel.toastMessage.collectAsState()
+                val downloadState by viewModel.downloadState.collectAsState()
                 val context = androidx.compose.ui.platform.LocalContext.current
 
                 androidx.compose.runtime.LaunchedEffect(toastMessage) {
@@ -70,12 +71,16 @@ class MainActivity : ComponentActivity() {
                                 config = config,
                                 pairedDevices = pairedDevices,
                                 updateInfo = updateInfo,
+                                downloadState = downloadState,
                                 onResolutionChanged = { viewModel.setResolution(it) },
                                 onToggleMirror = { viewModel.toggleMirror() },
                                 onToggleGrid = { viewModel.toggleGrid() },
                                 onAddDevice = { name, ip -> viewModel.addPairedDevice(name, ip) },
                                 onRemoveDevice = { viewModel.removePairedDevice(it) },
                                 onCheckUpdatesClick = { viewModel.checkAppUpdates(isManual = true) },
+                                onStartDownload = { viewModel.startInAppDownload(it) },
+                                onInstallApk = { viewModel.installDownloadedApk(it) },
+                                onCancelDownload = { viewModel.cancelInAppDownload() },
                                 onBackClick = { navController.popBackStack() }
                             )
                         }

@@ -72,6 +72,7 @@ fun CyberDashboardScreen(
     val qrBitmap by viewModel.qrCodeBitmap.collectAsState()
     val toastMsg by viewModel.toastMessage.collectAsState()
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
+    val downloadState by viewModel.downloadState.collectAsState()
 
     var showWebPortalModal by remember { mutableStateOf(false) }
     var showFiltersModal by remember { mutableStateOf(false) }
@@ -275,6 +276,10 @@ fun CyberDashboardScreen(
             if (showUpdateModal && updateInfo.isUpdateAvailable) {
                 CyberUpdateModal(
                     updateInfo = updateInfo,
+                    downloadState = downloadState,
+                    onStartDownload = { viewModel.startInAppDownload(it) },
+                    onInstallApk = { viewModel.installDownloadedApk(it) },
+                    onCancelDownload = { viewModel.cancelInAppDownload() },
                     onDismiss = { showUpdateModal = false }
                 )
             }
