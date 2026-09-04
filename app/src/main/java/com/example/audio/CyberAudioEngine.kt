@@ -3,6 +3,7 @@ package com.example.audio
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -10,11 +11,14 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.os.Build
 import android.util.Log
 import com.example.model.AudioRouting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -37,6 +41,8 @@ class CyberAudioEngine(private val context: Context) {
     private var echoCanceler: AcousticEchoCanceler? = null
 
     private var recordJob: Job? = null
+    private var broadcastJob: Job? = null
+    private val audioBroadcastChannel = Channel<ByteArray>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val audioStreams = CopyOnWriteArrayList<OutputStream>()
 
     private val _micDbLevel = MutableStateFlow(-60f)
@@ -63,6 +69,12 @@ class CyberAudioEngine(private val context: Context) {
                 bufferSize
             )
 
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e("CyberAudioEngine", "AudioRecord initialization failed (hardware in use or missing permission)")
+                stopMicCapture()
+                return
+            }
+
             val audioSessionId = audioRecord?.audioSessionId ?: 0
             if (audioSessionId != 0) {
                 if (NoiseSuppressor.isAvailable()) {
@@ -78,6 +90,23 @@ class CyberAudioEngine(private val context: Context) {
             }
 
             audioRecord?.startRecording()
+
+            // Asynchronous decoupled network broadcast worker (prevents network jitter from blocking AudioRecord loop)
+            broadcastJob = scope.launch(Dispatchers.IO) {
+                for (chunk in audioBroadcastChannel) {
+                    if (!isActive) break
+                    val iterator = audioStreams.iterator()
+                    while (iterator.hasNext()) {
+                        val stream = iterator.next()
+                        try {
+                            stream.write(chunk)
+                            stream.flush()
+                        } catch (_: Exception) {
+                            audioStreams.remove(stream)
+                        }
+                    }
+                }
+            }
 
             recordJob = scope.launch(Dispatchers.IO) {
                 val pcmBuffer = ShortArray(bufferSize / 2)
@@ -104,17 +133,8 @@ class CyberAudioEngine(private val context: Context) {
                         val bytesToWrite = readShorts * 2
                         onPcmChunk?.invoke(byteBuffer, bytesToWrite)
 
-                        // Broadcast to any attached HTTP audio streams
-                        val iterator = audioStreams.iterator()
-                        while (iterator.hasNext()) {
-                            val stream = iterator.next()
-                            try {
-                                stream.write(byteBuffer, 0, bytesToWrite)
-                                stream.flush()
-                            } catch (_: Exception) {
-                                audioStreams.remove(stream)
-                            }
-                        }
+                        // Forward to decoupled broadcast channel
+                        audioBroadcastChannel.trySend(byteBuffer.copyOf(bytesToWrite))
                     }
                 }
             }
@@ -126,6 +146,8 @@ class CyberAudioEngine(private val context: Context) {
     fun stopMicCapture() {
         recordJob?.cancel()
         recordJob = null
+        broadcastJob?.cancel()
+        broadcastJob = null
         try {
             audioRecord?.stop()
             audioRecord?.release()
@@ -209,12 +231,29 @@ class CyberAudioEngine(private val context: Context) {
     private fun applyAudioRouting(routing: AudioRouting) {
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-            if (routing == AudioRouting.SPEAKERPHONE) {
-                audioManager.mode = AudioManager.MODE_NORMAL
-                audioManager.isSpeakerphoneOn = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val devices = audioManager.availableCommunicationDevices
+                val targetType = if (routing == AudioRouting.SPEAKERPHONE) {
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                } else {
+                    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                }
+                val targetDevice = devices.firstOrNull { it.type == targetType }
+                if (targetDevice != null) {
+                    audioManager.setCommunicationDevice(targetDevice)
+                } else {
+                    audioManager.clearCommunicationDevice()
+                }
             } else {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                audioManager.isSpeakerphoneOn = false
+                if (routing == AudioRouting.SPEAKERPHONE) {
+                    audioManager.mode = AudioManager.MODE_NORMAL
+                    @Suppress("DEPRECATION")
+                    audioManager.isSpeakerphoneOn = true
+                } else {
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    @Suppress("DEPRECATION")
+                    audioManager.isSpeakerphoneOn = false
+                }
             }
         } catch (e: Exception) {
             Log.w("CyberAudioEngine", "Failed to apply audio routing", e)
@@ -232,6 +271,9 @@ class CyberAudioEngine(private val context: Context) {
     fun stopSpeakerPlayback() {
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager?.clearCommunicationDevice()
+            }
             audioManager?.mode = AudioManager.MODE_NORMAL
             audioTrack?.stop()
             audioTrack?.release()

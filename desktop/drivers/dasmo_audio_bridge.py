@@ -113,16 +113,55 @@ class PhoneMicToPcReceiver:
         self.thread.start()
 
     def _start_mic_stream(self):
+        # Auto-detect Virtual Audio Cable (VB-CABLE / Virtual Cable) for direct microphone input
+        cable_dev = None
+        try:
+            for i, dev in enumerate(sd.query_devices()):
+                if dev['max_output_channels'] > 0 and ('cable' in dev['name'].lower() or 'virtual' in dev['name'].lower()):
+                    cable_dev = i
+                    print(f"[+] Routing phone microphone into: {dev['name']}")
+                    break
+        except Exception as e:
+            print(f"[*] Audio device detection notice: {e}")
+
         while self.running:
             try:
                 req = urllib.request.Request(AUDIO_FEED_URL)
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     print("[SUCCESS] Phone Microphone is live.")
-                    while self.running:
-                        chunk = resp.read(2048)
-                        if not chunk:
-                            break
-                        # Stream is active
+                    
+                    stream_kwargs = {
+                        'samplerate': SAMPLE_RATE,
+                        'channels': 1,
+                        'dtype': 'int16'
+                    }
+                    if cable_dev is not None:
+                        stream_kwargs['device'] = cable_dev
+
+                    out_stream = None
+                    try:
+                        out_stream = sd.RawOutputStream(**stream_kwargs)
+                        out_stream.start()
+                    except Exception as dev_err:
+                        print(f"[*] Virtual mic output notice: {dev_err}")
+
+                    try:
+                        while self.running:
+                            chunk = resp.read(2048)
+                            if not chunk:
+                                break
+                            if out_stream is not None:
+                                try:
+                                    out_stream.write(chunk)
+                                except Exception:
+                                    pass
+                    finally:
+                        if out_stream is not None:
+                            try:
+                                out_stream.stop()
+                                out_stream.close()
+                            except Exception:
+                                pass
             except Exception:
                 time.sleep(2)
 

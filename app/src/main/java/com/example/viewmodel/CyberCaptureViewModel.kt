@@ -24,6 +24,7 @@ import com.example.network.CyberNsdBroadcaster
 import com.example.network.CyberStreamServer
 import com.example.network.NetworkUtils
 import com.example.service.DasmoCaptureService
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -131,6 +132,22 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
             },
             onAudioFeedDisconnected = { stream ->
                 audioEngine.removeAudioStream(stream)
+            },
+            telemetryProvider = {
+                val stats = _stats.value
+                val cfg = _config.value
+                JSONObject().apply {
+                    put("fps", stats.fps)
+                    put("mic_db", stats.micLevelDb)
+                    put("battery_pct", stats.batteryPercent)
+                    put("battery_temp", stats.batteryTemp)
+                    put("wifi_ssid", stats.wifiSsid)
+                    put("is_video_paused", cfg.isVideoPaused)
+                    put("is_mic_muted", cfg.isMicMuted)
+                    put("is_speaker_on", cfg.isSpeakerEnabled)
+                    put("active_filter", cfg.activeFilter.name)
+                    put("resolution", cfg.resolution.label)
+                }
             }
         ).apply {
             start(viewModelScope)

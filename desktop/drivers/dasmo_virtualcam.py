@@ -105,12 +105,26 @@ def stream_camera(cam_instance):
     print(f"[*] Select: '{cam_instance.device}'")
     print("[*] Latency: Zero Buffer (<30ms)")
     print("[*] Press Ctrl+C to stop.")
+    
+    target_w = cam_instance.width
+    target_h = cam_instance.height
+    last_valid_frame = None
+
     while True:
         r, f = grabber.read()
-        if not r or f is None:
+        if r and f is not None:
+            # Dynamic Resizing: If resolution or rotation changed, adapt smoothly without crashing pyvirtualcam
+            cur_h, cur_w = f.shape[:2]
+            if cur_w != target_w or cur_h != target_h:
+                f = cv2.resize(f, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            last_valid_frame = f
+            cam_instance.send(f)
+        elif last_valid_frame is not None:
+            # Hold last valid frame during momentary network hiccups
+            cam_instance.send(last_valid_frame)
+        else:
             time.sleep(0.005)
             continue
-        cam_instance.send(f)
         cam_instance.sleep_until_next_frame()
 
 try:

@@ -145,7 +145,8 @@ class CyberCameraManager(
                 }
 
                 // Check if video stream is paused (Privacy Hold mode for WhatsApp/calls)
-                val finalBitmap = if (currentConfig.isVideoPaused) {
+                val isPaused = currentConfig.isVideoPaused
+                val finalBitmap = if (isPaused) {
                     generatePrivacyPauseBitmap(rotatedBitmap.width, rotatedBitmap.height)
                 } else {
                     CyberFilterRenderer.applyFilter(
@@ -153,8 +154,6 @@ class CyberCameraManager(
                         currentConfig.activeFilter
                     )
                 }
-
-                _latestSnapshot.value = finalBitmap
 
                 // Compress to JPEG with fast buffer reuse
                 val bos = ByteArrayOutputStream(65536)
@@ -165,8 +164,17 @@ class CyberCameraManager(
                 )
                 val jpegBytes = bos.toByteArray()
 
-                if (finalBitmap != rotatedBitmap) {
+                // Clean up memory deterministically
+                if (isPaused) {
+                    // rotatedBitmap not used in paused state, release it
                     rotatedBitmap.recycle()
+                } else {
+                    if (finalBitmap != rotatedBitmap) {
+                        rotatedBitmap.recycle()
+                        finalBitmap.recycle()
+                    } else {
+                        rotatedBitmap.recycle()
+                    }
                 }
 
                 onNewFrameAvailable(jpegBytes)

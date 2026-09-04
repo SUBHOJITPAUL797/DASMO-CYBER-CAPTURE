@@ -31,7 +31,8 @@ class CyberStreamServer(
     private val onRemoteControlAction: (action: String, value: String) -> Unit,
     private val onSpeakerPcmReceived: (ByteArray, Int, Int) -> Unit,
     private val onAudioFeedConnected: ((OutputStream) -> Unit)? = null,
-    private val onAudioFeedDisconnected: ((OutputStream) -> Unit)? = null
+    private val onAudioFeedDisconnected: ((OutputStream) -> Unit)? = null,
+    private val telemetryProvider: (() -> JSONObject?)? = null
 ) {
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
@@ -254,11 +255,11 @@ class CyberStreamServer(
                         socket.close()
                     }
 
-                    // Status JSON
+                    // Status JSON (Real Live Hardware Telemetry)
                     uri.startsWith("/status.json") -> {
-                        val json = JSONObject().apply {
+                        val json = (telemetryProvider?.invoke() ?: JSONObject()).apply {
                             put("app", "DASMO CYBER CAPTURE")
-                            put("version", "1.0")
+                            put("version", "1.0.0")
                             put("clients", connectedClientsCount.get())
                             put("bitrate_kbps", _bitrateKbpsFlow.value)
                             put("total_bytes", totalBytesSent.get())

@@ -9,6 +9,11 @@ class NetworkDiscoveryEngine extends EventEmitter {
         this.isScanning = false;
         this.scanInterval = null;
         this.bonjour = null;
+        this.isConnected = false;
+    }
+
+    setIsConnected(connected) {
+        this.isConnected = !!connected;
     }
 
     startDiscovery() {
@@ -29,11 +34,13 @@ class NetworkDiscoveryEngine extends EventEmitter {
         // 2. Initial Fast Subnet Scan
         this.scanLocalSubnet();
 
-        // 3. Periodic background pulse every 5 seconds
+        // 3. Periodic background scan (every 15 seconds when idle, skipped when connected)
         if (!this.scanInterval) {
             this.scanInterval = setInterval(() => {
-                this.scanLocalSubnet();
-            }, 5000);
+                if (!this.isConnected) {
+                    this.scanLocalSubnet();
+                }
+            }, 15000);
         }
     }
 
@@ -71,20 +78,29 @@ class NetworkDiscoveryEngine extends EventEmitter {
         if (this.isScanning) return;
         this.isScanning = true;
 
-        const subnets = this.getLocalSubnets();
-        const probePromises = [];
+        try {
+            const subnets = this.getLocalSubnets();
+            const allTargets = [];
 
-        for (const sub of subnets) {
-            // Fast probe common IP ranges
-            for (let i = 1; i <= 254; i++) {
-                const targetIp = `${sub.prefix}.${i}`;
-                if (targetIp === sub.myIp) continue;
-                probePromises.push(this.probeIp(targetIp, 8080));
+            for (const sub of subnets) {
+                for (let i = 1; i <= 254; i++) {
+                    const targetIp = `${sub.prefix}.${i}`;
+                    if (targetIp !== sub.myIp) {
+                        allTargets.push(targetIp);
+                    }
+                }
             }
-        }
 
-        await Promise.allSettled(probePromises);
-        this.isScanning = false;
+            // Industrial Batching: Probe in chunks of 20 concurrent sockets to prevent Wi-Fi jitter
+            const batchSize = 20;
+            for (let i = 0; i < allTargets.length; i += batchSize) {
+                if (this.isConnected) break; // Abort scan immediately if device connected mid-scan
+                const batch = allTargets.slice(i, i + batchSize);
+                await Promise.allSettled(batch.map(ip => this.probeIp(ip, 8080)));
+            }
+        } finally {
+            this.isScanning = false;
+        }
     }
 
     probeIp(ip, port = 8080) {

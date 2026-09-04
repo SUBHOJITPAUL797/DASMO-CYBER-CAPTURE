@@ -46,6 +46,19 @@ function getDriverScriptPath(scriptName) {
     return path.join(process.cwd(), 'drivers', scriptName);
 }
 
+function forceKillProcess(proc) {
+    if (!proc) return;
+    try {
+        if (process.platform === 'win32' && proc.pid) {
+            exec(`taskkill /pid ${proc.pid} /T /F`, () => {});
+        } else {
+            proc.kill('SIGKILL');
+        }
+    } catch (_) {
+        try { proc.kill('SIGTERM'); } catch (__) {}
+    }
+}
+
 class HardwareDriverBridge extends EventEmitter {
     constructor() {
         super();
@@ -160,9 +173,7 @@ class HardwareDriverBridge extends EventEmitter {
 
     stopVirtualCamera() {
         if (this.bridgeProcess) {
-            try {
-                this.bridgeProcess.kill('SIGTERM');
-            } catch (_) {}
+            forceKillProcess(this.bridgeProcess);
             this.bridgeProcess = null;
         }
         this.isActive = false;
@@ -198,7 +209,7 @@ class HardwareDriverBridge extends EventEmitter {
 
     stopAudioBridge() {
         if (this.audioProcess) {
-            try { this.audioProcess.kill('SIGTERM'); } catch (_) {}
+            forceKillProcess(this.audioProcess);
             this.audioProcess = null;
         }
     }

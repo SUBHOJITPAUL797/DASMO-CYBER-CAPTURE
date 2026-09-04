@@ -280,6 +280,7 @@ ipcMain.handle('discovery:scan-now', async () => {
 
 ipcMain.handle('connection:set-active', (event, device) => {
     activeConnectedDevice = device;
+    discoveryEngine?.setIsConnected(!!device);
     updateTrayMenu();
     return true;
 });

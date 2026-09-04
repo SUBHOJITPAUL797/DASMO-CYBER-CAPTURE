@@ -325,24 +325,24 @@ function initHardwareControls() {
         sendControl('torch', '');
     });
 
-    // Sliders
+    // Throttled Hardware Sliders (Zero Network Saturation)
     document.getElementById('sliderZoom')?.addEventListener('input', (e) => {
         const val = e.target.value;
         document.getElementById('valZoom').innerText = `${val}x`;
         document.getElementById('hudZoomLabel').innerText = `ZOOM: ${val}x`;
-        sendControl('zoom', val);
+        sendControlThrottled('zoom', val);
     });
 
     document.getElementById('sliderGain')?.addEventListener('input', (e) => {
         const val = e.target.value;
         document.getElementById('valGain').innerText = `${val}x`;
-        sendControl('gain', val);
+        sendControlThrottled('gain', val);
     });
 
     document.getElementById('sliderSpeakerVol')?.addEventListener('input', (e) => {
         const val = e.target.value;
         document.getElementById('valSpeakerVol').innerText = `${Math.round(val * 100)}%`;
-        sendControl('volume', val);
+        sendControlThrottled('volume', val);
     });
 
     document.getElementById('btnLoudspeaker')?.addEventListener('click', () => {
@@ -382,32 +382,137 @@ function initHardwareControls() {
     });
 }
 
+const throttledControls = new Map();
+function sendControlThrottled(action, value = '', delayMs = 50) {
+    if (!activeDevice) return;
+    if (throttledControls.has(action)) {
+        clearTimeout(throttledControls.get(action));
+    }
+    const timer = setTimeout(() => {
+        sendControl(action, value);
+        throttledControls.delete(action);
+    }, delayMs);
+    throttledControls.set(action, timer);
+}
+
 function sendControl(action, value = '') {
     if (!activeDevice) return;
     const url = `http://${activeDevice.ip}:${activeDevice.port}/api/control?action=${encodeURIComponent(action)}&value=${encodeURIComponent(value)}`;
     fetch(url).catch(() => {});
 }
 
-// Telemetry & Status Polling
+// Telemetry, Status Polling & Resilient Auto-Reconnection
+let consecutiveFailures = 0;
+let isReconnecting = false;
+
 function startStatusPolling() {
     if (statusPollInterval) clearInterval(statusPollInterval);
+    consecutiveFailures = 0;
+    isReconnecting = false;
 
     statusPollInterval = setInterval(async () => {
         if (!activeDevice) return;
         try {
-            const res = await fetch(`http://${activeDevice.ip}:${activeDevice.port}/status.json`, { cache: 'no-store' });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1800);
+            const res = await fetch(`http://${activeDevice.ip}:${activeDevice.port}/status.json`, {
+                cache: 'no-store',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
             if (res.ok) {
                 const data = await res.json();
-                document.getElementById('telFps').innerText = `${data.fps || 30.0}`;
-                document.getElementById('telBitrate').innerText = `${data.bitrate_kbps || 1850} kbps`;
-                document.getElementById('telClients').innerText = `${data.clients || 1} PC`;
+                consecutiveFailures = 0;
+
+                if (isReconnecting) {
+                    // Connection recovered!
+                    isReconnecting = false;
+                    const livePill = document.getElementById('livePill');
+                    if (livePill) livePill.className = 'live-indicator live-on';
+                    const pulseDot = document.getElementById('pulseDot');
+                    if (pulseDot) pulseDot.style.background = 'var(--green)';
+                    const statusText = document.getElementById('txtLiveStatus');
+                    if (statusText) statusText.innerText = 'AIR LINK ACTIVE';
+
+                    // Remove reconnecting overlay
+                    const reconnectOverlay = document.getElementById('reconnectOverlay');
+                    if (reconnectOverlay) reconnectOverlay.remove();
+
+                    // Refresh video feed with fresh timestamp
+                    const videoImg = document.getElementById('videoFeedImg');
+                    if (videoImg) videoImg.src = `${activeDevice.streamUrl}?_t=${Date.now()}`;
+                }
+
+                // Update FPS & Bitrate from real live telemetry
+                const fpsVal = typeof data.fps === 'number' ? data.fps.toFixed(1) : (data.fps || '30.0');
+                const telFps = document.getElementById('telFps');
+                if (telFps) telFps.innerText = `${fpsVal}`;
+                const hudFps = document.getElementById('hudFpsLabel');
+                if (hudFps) hudFps.innerText = `FPS: ${fpsVal}`;
                 
-                // Simulate VU meter
-                const vu = isMicMuted ? 0 : Math.min(100, Math.max(10, Math.random() * 85));
-                document.getElementById('vuMeterBar').style.width = `${vu}%`;
-                document.getElementById('txtMicLevel').innerText = isMicMuted ? 'MUTED' : `-${Math.round(60 - (vu * 0.6))} dB`;
+                const telBitrate = document.getElementById('telBitrate');
+                if (telBitrate) telBitrate.innerText = `${data.bitrate_kbps || 1850} kbps`;
+                
+                const telClients = document.getElementById('telClients');
+                if (telClients) telClients.innerText = `${data.clients || 1} PC`;
+
+                // Real Hardware Microphone RMS Decibel Meter
+                const micMuted = data.is_mic_muted !== undefined ? data.is_mic_muted : isMicMuted;
+                const vuBar = document.getElementById('vuMeterBar');
+                const micTxt = document.getElementById('txtMicLevel');
+                if (micMuted) {
+                    if (vuBar) vuBar.style.width = '0%';
+                    if (micTxt) micTxt.innerText = 'MUTED';
+                } else {
+                    const db = typeof data.mic_db === 'number' ? data.mic_db : -60.0;
+                    // Scale -60 dB .. 0 dB to 0% .. 100%
+                    const vuPct = Math.max(0, Math.min(100, Math.round(((db + 60) / 60) * 100)));
+                    if (vuBar) vuBar.style.width = `${vuPct}%`;
+                    if (micTxt) micTxt.innerText = `${db.toFixed(1)} dB`;
+                }
+
+                // If phone paused video, show privacy state in UI
+                if (data.is_video_paused !== undefined && data.is_video_paused !== isVideoPaused) {
+                    isVideoPaused = data.is_video_paused;
+                    const btn = document.getElementById('btnPauseVideo');
+                    const lbl = document.getElementById('lblPauseVideo');
+                    if (isVideoPaused) {
+                        btn?.classList.add('danger');
+                        if (lbl) lbl.innerText = 'Resume Video';
+                    } else {
+                        btn?.classList.remove('danger');
+                        if (lbl) lbl.innerText = 'Pause Video';
+                    }
+                }
+            } else {
+                throw new Error('HTTP ' + res.status);
             }
-        } catch (_) {}
+        } catch (err) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 3 && !isReconnecting) {
+                isReconnecting = true;
+                const livePill = document.getElementById('livePill');
+                if (livePill) livePill.className = 'live-indicator live-standby';
+                const pulseDot = document.getElementById('pulseDot');
+                if (pulseDot) pulseDot.style.background = 'var(--amber)';
+                const statusText = document.getElementById('txtLiveStatus');
+                if (statusText) statusText.innerText = 'RECONNECTING...';
+
+                // Display stylish reconnection HUD overlay on viewfinder
+                const viewfinder = document.querySelector('.viewfinder-frame');
+                if (viewfinder && !document.getElementById('reconnectOverlay')) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'reconnectOverlay';
+                    overlay.style.cssText = 'position:absolute;inset:0;background:rgba(8,12,20,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--amber);font-family:var(--font-mono);z-index:20;';
+                    overlay.innerHTML = `
+                        <div style="font-size:18px;font-weight:bold;margin-bottom:8px;animation:pulse 1.5s infinite;">⚠ SIGNAL INTERRUPTED</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Reconnecting to ${activeDevice.name} (${activeDevice.ip})...</div>
+                    `;
+                    viewfinder.appendChild(overlay);
+                }
+            }
+        }
     }, 1000);
 }
 
