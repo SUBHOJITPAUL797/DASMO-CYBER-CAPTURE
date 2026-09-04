@@ -74,13 +74,46 @@ function createPopoutWindow(streamUrl) {
             <title>DASMO CYBER CAPTURE - Pop-Out Viewfinder</title>
             <style>
                 body { margin: 0; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: monospace; }
-                img { width: 100%; height: 100%; object-fit: contain; }
-                .hud { position: absolute; top: 10px; left: 10px; color: #00e5ff; font-size: 11px; background: rgba(8,12,20,0.8); padding: 4px 8px; border-radius: 4px; border: 1px solid #00e5ff; pointer-events: none; }
+                canvas, img { width: 100%; height: 100%; object-fit: contain; }
+                .hud { position: absolute; top: 10px; left: 10px; color: #00e5ff; font-size: 11px; background: rgba(8,12,20,0.8); padding: 4px 8px; border-radius: 4px; border: 1px solid #00e5ff; pointer-events: none; z-index: 10; }
             </style>
         </head>
         <body>
-            <div class="hud">DASMO CYBER CAPTURE // POP-OUT PREVIEW</div>
-            <img src="${streamUrl}" alt="Live Camera Stream" />
+            <div class="hud">DASMO CYBER CAPTURE // REAL-TIME PREVIEW</div>
+            <canvas id="cv" style="display:none;"></canvas>
+            <img id="im" src="${streamUrl}" alt="Live Camera Stream" />
+            <script>
+                const cv = document.getElementById('cv');
+                const im = document.getElementById('im');
+                const ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
+                const wsUrl = '${streamUrl}'.replace(/^http:/, 'ws:').replace(/\\/video_feed.*$/, '/ws/video');
+                let pending = null;
+                let rendering = false;
+                try {
+                    const ws = new WebSocket(wsUrl);
+                    ws.binaryType = 'arraybuffer';
+                    ws.onopen = () => { cv.style.display = 'block'; im.style.display = 'none'; };
+                    ws.onmessage = (e) => {
+                        if (e.data instanceof ArrayBuffer) {
+                            pending = e.data;
+                            if (!rendering) render();
+                        }
+                    };
+                    function render() {
+                        if (!pending || rendering) return;
+                        rendering = true;
+                        const buf = pending;
+                        pending = null;
+                        createImageBitmap(new Blob([buf], { type: 'image/jpeg' })).then(bm => {
+                            if (cv.width !== bm.width || cv.height !== bm.height) { cv.width = bm.width; cv.height = bm.height; }
+                            ctx.drawImage(bm, 0, 0);
+                            bm.close();
+                            rendering = false;
+                            if (pending) render();
+                        }).catch(() => { rendering = false; });
+                    }
+                } catch(_) {}
+            </script>
         </body>
         </html>
     `)}`);

@@ -81,14 +81,20 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
 
     fun checkAppUpdates(isManual: Boolean = false, onComplete: ((com.example.updater.AppUpdateInfo) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            val info = com.example.updater.CyberUpdateManager.checkForUpdates(currentVersion = "1.0.0")
+            val appVer = try {
+                val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
+                pInfo.versionName ?: "1.1.0"
+            } catch (e: Exception) {
+                "1.1.0"
+            }
+            val info = com.example.updater.CyberUpdateManager.checkForUpdates(currentVersion = appVer)
             _appUpdateInfo.value = info
             withContext(Dispatchers.Main) {
                 if (isManual) {
                     if (info.isUpdateAvailable) {
                         _toastMessage.value = "New update available: v${info.latestVersion}!"
                     } else if (info.latestVersion.isNotEmpty()) {
-                        _toastMessage.value = "✓ You are on the latest version (v1.0.0)"
+                        _toastMessage.value = "✓ You are on the latest version (v$appVer)"
                     } else {
                         _toastMessage.value = "✓ DASMO CYBER CAPTURE is up to date"
                     }

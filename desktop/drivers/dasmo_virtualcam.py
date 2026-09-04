@@ -5,11 +5,15 @@
 # Compatible with: WhatsApp Desktop, Zoom, Microsoft Teams, Google Meet, OBS Studio
 # ==============================================================================
 
+import os
 import sys
 import time
 import threading
 import urllib.request
 import numpy as np
+
+# Disable FFmpeg network buffering and enable low delay
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "fflags;nobuffer|flags;low_delay|max_delay;0"
 
 try:
     import cv2

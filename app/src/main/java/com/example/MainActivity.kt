@@ -35,6 +35,15 @@ class MainActivity : ComponentActivity() {
                 val config by viewModel.config.collectAsState()
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
                 val updateInfo by viewModel.appUpdateInfo.collectAsState()
+                val toastMessage by viewModel.toastMessage.collectAsState()
+                val context = androidx.compose.ui.platform.LocalContext.current
+
+                androidx.compose.runtime.LaunchedEffect(toastMessage) {
+                    toastMessage?.let {
+                        android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+                        viewModel.clearToast()
+                    }
+                }
 
                 Scaffold(
                     modifier = Modifier

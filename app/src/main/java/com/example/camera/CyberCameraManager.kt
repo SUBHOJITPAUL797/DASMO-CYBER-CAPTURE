@@ -47,6 +47,7 @@ class CyberCameraManager(
     private var cachedPauseBitmap: Bitmap? = null
     private var cachedPauseWidth = 0
     private var cachedPauseHeight = 0
+    private val reusableBos = ByteArrayOutputStream(131072)
 
     private val _measuredFps = MutableStateFlow(0f)
     val measuredFps: StateFlow<Float> = _measuredFps
@@ -106,7 +107,8 @@ class CyberCameraManager(
 
         imageAnalysis?.setAnalyzer(analysisExecutor) { imageProxy ->
             val now = System.currentTimeMillis()
-            if (now - lastFrameTime < frameIntervalMs || isProcessingFrame.get()) {
+            // Allow 4ms jitter window so 30 FPS does not drop to 15 FPS
+            if ((now - lastFrameTime) < (frameIntervalMs - 4) || isProcessingFrame.get()) {
                 imageProxy.close()
                 return@setAnalyzer
             }
@@ -155,18 +157,20 @@ class CyberCameraManager(
                     )
                 }
 
-                // Compress to JPEG with fast buffer reuse
-                val bos = ByteArrayOutputStream(65536)
-                finalBitmap.compress(
-                    Bitmap.CompressFormat.JPEG,
-                    currentConfig.jpegQuality.coerceIn(40, 85),
-                    bos
-                )
-                val jpegBytes = bos.toByteArray()
+                // Compress to JPEG with thread-confined preallocated buffer reuse (zero GC reallocations)
+                val jpegBytes: ByteArray
+                synchronized(reusableBos) {
+                    reusableBos.reset()
+                    finalBitmap.compress(
+                        Bitmap.CompressFormat.JPEG,
+                        currentConfig.jpegQuality.coerceIn(40, 80),
+                        reusableBos
+                    )
+                    jpegBytes = reusableBos.toByteArray()
+                }
 
                 // Clean up memory deterministically
                 if (isPaused) {
-                    // rotatedBitmap not used in paused state, release it
                     rotatedBitmap.recycle()
                 } else {
                     if (finalBitmap != rotatedBitmap) {

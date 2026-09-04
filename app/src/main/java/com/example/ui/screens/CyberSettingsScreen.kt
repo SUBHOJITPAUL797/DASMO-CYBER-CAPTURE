@@ -92,6 +92,12 @@ fun CyberSettingsScreen(
     var newDeviceIp by remember { mutableStateOf("") }
     val context = LocalContext.current
 
+    androidx.compose.runtime.LaunchedEffect(updateInfo.isUpdateAvailable) {
+        if (updateInfo.isUpdateAvailable) {
+            showUpdateModal = true
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -283,7 +289,7 @@ fun CyberSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Current Version: v1.0.0", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary, fontWeight = FontWeight.Bold)
+                                Text("Current Version: v${updateInfo.currentVersion}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary, fontWeight = FontWeight.Bold)
                                 Text(if (updateInfo.isUpdateAvailable) "Latest: v${updateInfo.latestVersion} (Update Available)" else "System is up to date", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberTextMuted)
                             }
                             Box(

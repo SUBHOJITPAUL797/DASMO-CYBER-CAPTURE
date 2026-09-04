@@ -75,5 +75,5 @@ data class CyberConfig(
     val isWakeLockEnabled: Boolean = true,
     val autoStartCapture: Boolean = true,
     val mDnsDiscoveryEnabled: Boolean = true,
-    val jpegQuality: Int = 80
+    val jpegQuality: Int = 70
 )
