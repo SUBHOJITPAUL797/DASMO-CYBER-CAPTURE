@@ -1,8 +1,9 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const { NetworkDiscoveryEngine } = require('./discovery');
-const { HardwareDriverBridge } = require('./bridge');
+const { HardwareDriverBridge, getDriverScriptPath } = require('./bridge');
 const { checkForDesktopUpdates } = require('./updater');
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -346,6 +347,30 @@ ipcMain.handle('driver:install-audio', () => {
         if (err) console.warn('[Install Audio Driver]', err);
     });
     return true;
+});
+
+ipcMain.handle('driver:install-cam-driver', () => {
+    const { exec } = require('child_process');
+    const batPath = getDriverScriptPath('install_dasmo_camera.bat');
+    if (fs.existsSync(batPath)) {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+            if (err) console.warn('[Install Cam Driver]', err);
+        });
+        return { success: true, message: 'Camera installer launched with Administrator privileges' };
+    }
+    return { success: false, message: 'Installer script not found' };
+});
+
+ipcMain.handle('driver:configure-device-names', () => {
+    const { exec } = require('child_process');
+    const batPath = getDriverScriptPath('setup_dasmo_device_names.bat');
+    if (fs.existsSync(batPath)) {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+            if (err) console.warn('[Configure Device Names]', err);
+        });
+        return { success: true, message: 'Device name setup launched with Administrator privileges' };
+    }
+    return { success: false, message: 'Setup script not found' };
 });
 
 ipcMain.handle('driver:start-cam', (event, phoneIp) => {

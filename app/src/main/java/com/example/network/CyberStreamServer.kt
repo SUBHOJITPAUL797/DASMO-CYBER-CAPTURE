@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.ServerSocket
@@ -43,6 +44,8 @@ class CyberStreamServer(
     private val activeMjpegChannels = ConcurrentHashMap<OutputStream, Channel<ByteArray>>()
     private val activeWsChannels = ConcurrentHashMap<OutputStream, Channel<ByteArray>>()
     private val activeAudioStreams = CopyOnWriteArrayList<OutputStream>()
+    private val isSpeakerFeedActive = AtomicBoolean(false)
+    private val lastTelemetryRequestTime = AtomicLong(0)
 
     private val _connectedClientsFlow = MutableStateFlow(0)
     val connectedClientsFlow: StateFlow<Int> = _connectedClientsFlow
@@ -117,13 +120,17 @@ class CyberStreamServer(
         withContext(Dispatchers.IO) {
             try {
                 socket.tcpNoDelay = true
-                socket.sendBufferSize = 65536
+                socket.sendBufferSize = 262144   // 256KB — HD JPEG frames are 40-80KB; 64KB caused backpressure
                 socket.receiveBufferSize = 16384
                 socket.soTimeout = 15000
-                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                socket.setSoLinger(false, 0)     // Instant socket close — avoids TIME_WAIT latency on disconnect
+                val inputStream = socket.getInputStream()
                 val outputStream = socket.getOutputStream()
 
-                val requestLine = reader.readLine() ?: return@withContext
+                val headerLines = readHttpHeaderLines(inputStream)
+                if (headerLines.isEmpty()) return@withContext
+
+                val requestLine = headerLines[0]
                 val parts = requestLine.split(" ")
                 if (parts.size < 2) return@withContext
 
@@ -132,10 +139,8 @@ class CyberStreamServer(
 
                 // Read headers
                 val headers = mutableMapOf<String, String>()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    if (line.isNullOrEmpty()) break
-                    val headerParts = line!!.split(": ", limit = 2)
+                for (i in 1 until headerLines.size) {
+                    val headerParts = headerLines[i].split(": ", limit = 2)
                     if (headerParts.size == 2) {
                         headers[headerParts[0].lowercase()] = headerParts[1]
                     }
@@ -163,10 +168,10 @@ class CyberStreamServer(
                     socket.localAddress.hostAddress?.takeIf { it != "0.0.0.0" } ?: "127.0.0.1"
                 }
 
-                // 1. Check for WebSocket Upgrade (Zero-Queue Real-Time Binary Video Stream)
+                // 1. Check for WebSocket Upgrade (Tri-Channel Dedicated Zero-Queue Engine)
                 val isWsUpgrade = headers["upgrade"]?.equals("websocket", ignoreCase = true) == true ||
                         headers["connection"]?.contains("upgrade", ignoreCase = true) == true ||
-                        uri.startsWith("/ws/video") || uri.startsWith("/ws/stream")
+                        uri.startsWith("/ws/")
 
                 val secKey = headers["sec-websocket-key"]
                 if (isWsUpgrade && !secKey.isNullOrEmpty()) {
@@ -184,27 +189,94 @@ class CyberStreamServer(
                     outputStream.flush()
 
                     socket.soTimeout = 0
-                    val wsChannel = Channel<ByteArray>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-                    activeWsChannels[outputStream] = wsChannel
-                    updateClientCount()
 
-                    // Immediately dispatch latest frame if available so client paints without delay
-                    latestJpegFrame?.let { wsChannel.trySend(it) }
+                    when {
+                        // Channel A: Video WebSocket (60 FPS Binary JPEG frames)
+                        uri.startsWith("/ws/video") || uri.startsWith("/ws/stream") -> {
+                            val wsChannel = Channel<ByteArray>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+                            activeWsChannels[outputStream] = wsChannel
+                            updateClientCount()
+                            latestJpegFrame?.let { wsChannel.trySend(it) }
 
-                    try {
-                        while (socket.isConnected && !socket.isClosed && isRunning.get()) {
-                            val frame = wsChannel.receiveCatching().getOrNull() ?: break
-                            sendWsBinaryFrame(outputStream, frame)
-                            val bytes = frame.size.toLong()
-                            totalBytesSent.addAndGet(bytes)
-                            bytesInLastSecond.addAndGet(bytes)
+                            try {
+                                while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                    val frame = wsChannel.receiveCatching().getOrNull() ?: break
+                                    sendWsBinaryFrame(outputStream, frame)
+                                    val bytes = frame.size.toLong()
+                                    totalBytesSent.addAndGet(bytes)
+                                    bytesInLastSecond.addAndGet(bytes)
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                activeWsChannels.remove(outputStream)
+                                wsChannel.close()
+                                updateClientCount()
+                                try { socket.close() } catch (_: Exception) {}
+                            }
                         }
-                    } catch (_: Exception) {
-                    } finally {
-                        activeWsChannels.remove(outputStream)
-                        wsChannel.close()
-                        updateClientCount()
-                        try { socket.close() } catch (_: Exception) {}
+
+                        // Channel B: Phone Mic WebSocket (Phone Mic -> PC Virtual Mic)
+                        uri.startsWith("/ws/mic") || uri.startsWith("/ws/audio") -> {
+                            val wsOut = WebSocketBinaryOutputStream(outputStream)
+                            activeAudioStreams.add(wsOut)
+                            updateClientCount()
+                            onAudioFeedConnected?.invoke(wsOut)
+
+                            try {
+                                val dummy = ByteArray(256)
+                                while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                    val r = inputStream.read(dummy)
+                                    if (r == -1) break
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                activeAudioStreams.remove(wsOut)
+                                updateClientCount()
+                                onAudioFeedDisconnected?.invoke(wsOut)
+                                try { socket.close() } catch (_: Exception) {}
+                            }
+                        }
+
+                        // Channel C: Speaker WebSocket (PC Audio -> Phone Loudspeaker)
+                        uri.startsWith("/ws/speaker") -> {
+                            isSpeakerFeedActive.set(true)
+                            updateClientCount()
+                            Log.i("CyberStreamServer", "[WS SPEAKER] PC speaker stream connected from ${socket.inetAddress?.hostAddress}")
+
+                            try {
+                                while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                    val pcmPayload = readWsFrame(inputStream) ?: break
+                                    if (pcmPayload.isNotEmpty()) {
+                                        onSpeakerPcmReceived(pcmPayload, 0, pcmPayload.size)
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                isSpeakerFeedActive.set(false)
+                                updateClientCount()
+                                try { socket.close() } catch (_: Exception) {}
+                            }
+                        }
+
+                        else -> {
+                            // Default fallback: Video WebSocket
+                            val wsChannel = Channel<ByteArray>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+                            activeWsChannels[outputStream] = wsChannel
+                            updateClientCount()
+                            latestJpegFrame?.let { wsChannel.trySend(it) }
+
+                            try {
+                                while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                    val frame = wsChannel.receiveCatching().getOrNull() ?: break
+                                    sendWsBinaryFrame(outputStream, frame)
+                                }
+                            } finally {
+                                activeWsChannels.remove(outputStream)
+                                wsChannel.close()
+                                updateClientCount()
+                                try { socket.close() } catch (_: Exception) {}
+                            }
+                        }
                     }
                     return@withContext
                 }
@@ -311,15 +383,22 @@ class CyberStreamServer(
 
                     // Status JSON (Real Live Hardware Telemetry)
                     uri.startsWith("/status.json") -> {
+                        lastTelemetryRequestTime.set(System.currentTimeMillis())
+                        updateClientCount()
+
                         val json = (telemetryProvider?.invoke() ?: JSONObject()).apply {
                             put("app", "DASMO CYBER CAPTURE")
-                            put("version", "1.0.0")
+                            put("version", "1.4.3")
                             put("clients", connectedClientsCount.get())
                             put("bitrate_kbps", _bitrateKbpsFlow.value)
                             put("total_bytes", totalBytesSent.get())
                             put("active_mjpeg_streams", activeMjpegChannels.size)
                             put("active_ws_streams", activeWsChannels.size)
                             put("websocket_url", "ws://$resolvedHostIp:$port/ws/video")
+                            put("websocket_video_url", "ws://$resolvedHostIp:$port/ws/video")
+                            put("websocket_mic_url", "ws://$resolvedHostIp:$port/ws/mic")
+                            put("websocket_speaker_url", "ws://$resolvedHostIp:$port/ws/speaker")
+                            put("client_ip", socket.inetAddress?.hostAddress ?: "")
                         }.toString()
 
                         val response = (
@@ -351,26 +430,69 @@ class CyberStreamServer(
                         outputStream.flush()
 
                         activeAudioStreams.add(outputStream)
+                        updateClientCount()
                         onAudioFeedConnected?.invoke(outputStream)
 
                         try {
-                            while (socket.isConnected && !socket.isClosed && isRunning.get()) {
-                                kotlinx.coroutines.delay(500)
+                            val dummy = ByteArray(256)
+                            while (isRunning.get()) {
+                                val read = inputStream.read(dummy)
+                                if (read == -1) break
                             }
+                        } catch (_: Exception) {
                         } finally {
+                            try { socket.close() } catch (_: Exception) {}
                             activeAudioStreams.remove(outputStream)
+                            updateClientCount()
                             onAudioFeedDisconnected?.invoke(outputStream)
                         }
                     }
 
                     // Speaker audio stream receiver (PC plays audio to phone speaker)
                     uri.startsWith("/speaker_feed") && method.equals("POST", ignoreCase = true) -> {
-                        val inputStream = socket.getInputStream()
+                        socket.soTimeout = 0
+                        val respHeader = "HTTP/1.1 200 OK\r\nServer: DASMO-CYBER-CAPTURE/1.0\r\nAccess-Control-Allow-Origin: *\r\nConnection: keep-alive\r\n\r\n".toByteArray()
+                        outputStream.write(respHeader)
+                        outputStream.flush()
+
+                        isSpeakerFeedActive.set(true)
+                        updateClientCount()
+                        Log.i("CyberStreamServer", "[SPEAKER] PC audio stream connected from ${socket.inetAddress?.hostAddress}")
+
                         val buffer = ByteArray(4096)
-                        while (socket.isConnected && !socket.isClosed && isRunning.get()) {
-                            val read = inputStream.read(buffer)
-                            if (read <= 0) break
-                            onSpeakerPcmReceived(buffer, 0, read)
+                        var leftover: Byte? = null
+                        try {
+                            while (socket.isConnected && !socket.isClosed && isRunning.get()) {
+                                val read = inputStream.read(buffer)
+                                if (read <= 0) break
+
+                                // Guarantee 16-bit sample alignment (even byte count)
+                                val combined: ByteArray
+                                if (leftover != null) {
+                                    combined = ByteArray(read + 1)
+                                    combined[0] = leftover
+                                    System.arraycopy(buffer, 0, combined, 1, read)
+                                    leftover = null
+                                } else {
+                                    combined = buffer
+                                }
+
+                                val totalBytes = if (combined === buffer) read else combined.size
+                                val playableLength = totalBytes - (totalBytes % 2)
+                                if (totalBytes % 2 != 0) {
+                                    leftover = combined[totalBytes - 1]
+                                }
+
+                                if (playableLength > 0) {
+                                    onSpeakerPcmReceived(combined, 0, playableLength)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w("CyberStreamServer", "[SPEAKER] Audio stream error: ${e.message}")
+                        } finally {
+                            isSpeakerFeedActive.set(false)
+                            updateClientCount()
+                            Log.i("CyberStreamServer", "[SPEAKER] PC audio stream disconnected")
                         }
                     }
 
@@ -432,8 +554,32 @@ class CyberStreamServer(
         }
     }
 
+    private fun readHttpHeaderLines(inputStream: java.io.InputStream): List<String> {
+        val lines = mutableListOf<String>()
+        val curLine = StringBuilder()
+        while (true) {
+            val b = inputStream.read()
+            if (b == -1) break
+            val c = b.toChar()
+            if (c == '\n') {
+                val line = curLine.toString().trimEnd('\r')
+                if (line.isEmpty()) {
+                    break
+                }
+                lines.add(line)
+                curLine.setLength(0)
+            } else {
+                curLine.append(c)
+            }
+            if (lines.size > 100 || curLine.length > 4096) break
+        }
+        return lines
+    }
+
     private fun updateClientCount() {
-        val count = activeMjpegChannels.size + activeWsChannels.size
+        val hasRecentTelemetry = (System.currentTimeMillis() - lastTelemetryRequestTime.get()) < 4000
+        val activeMedia = activeMjpegChannels.size + activeWsChannels.size + activeAudioStreams.size + (if (isSpeakerFeedActive.get()) 1 else 0)
+        val count = if (activeMedia > 0) activeMedia else if (hasRecentTelemetry) 1 else 0
         connectedClientsCount.set(count)
         _connectedClientsFlow.value = count
     }
@@ -461,6 +607,82 @@ class CyberStreamServer(
         out.write(header)
         out.write(frame)
         out.flush()
+    }
+
+    private inner class WebSocketBinaryOutputStream(private val rawOut: OutputStream) : OutputStream() {
+        override fun write(b: Int) {
+            write(byteArrayOf(b.toByte()), 0, 1)
+        }
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            val chunk = if (off == 0 && len == b.size) b else b.copyOfRange(off, off + len)
+            sendWsBinaryFrame(rawOut, chunk)
+        }
+        override fun flush() {
+            try { rawOut.flush() } catch (_: Exception) {}
+        }
+        override fun close() {
+            try { rawOut.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun readWsFrame(input: InputStream): ByteArray? {
+        val b0 = input.read()
+        if (b0 == -1) return null
+        val b1 = input.read()
+        if (b1 == -1) return null
+
+        val opcode = b0 and 0x0F
+        if (opcode == 8) return null // WS Close frame
+
+        val isMasked = (b1 and 0x80) != 0
+        var payloadLen = (b1 and 0x7F).toLong()
+
+        if (payloadLen == 126L) {
+            val b2 = input.read()
+            val b3 = input.read()
+            if (b2 == -1 || b3 == -1) return null
+            payloadLen = ((b2 and 0xFF) shl 8 or (b3 and 0xFF)).toLong()
+        } else if (payloadLen == 127L) {
+            var len = 0L
+            for (i in 0 until 8) {
+                val b = input.read()
+                if (b == -1) return null
+                len = (len shl 8) or (b and 0xFF).toLong()
+            }
+            payloadLen = len
+        }
+
+        val maskKey = ByteArray(4)
+        if (isMasked) {
+            var readMask = 0
+            while (readMask < 4) {
+                val r = input.read(maskKey, readMask, 4 - readMask)
+                if (r == -1) return null
+                readMask += r
+            }
+        }
+
+        val payload = ByteArray(payloadLen.toInt())
+        var totalRead = 0
+        while (totalRead < payload.size) {
+            val r = input.read(payload, totalRead, payload.size - totalRead)
+            if (r == -1) return null
+            totalRead += r
+        }
+
+        if (isMasked) {
+            for (i in payload.indices) {
+                payload[i] = (payload[i].toInt() xor maskKey[i % 4].toInt()).toByte()
+            }
+        }
+
+        // Return audio bytes for Binary frames (opcode 2)
+        // Return empty array for Ping (9), Pong (10), or Text (1) to keep connection alive
+        return when (opcode) {
+            2 -> payload
+            8 -> null // WS Close frame
+            else -> ByteArray(0)
+        }
     }
 
     fun stop() {
@@ -671,8 +893,8 @@ class CyberStreamServer(
                         <span id="clockDisplay">00:00:00</span>
                     </div>
                     <div class="hud-bottom">
-                        <span id="callStatusBadge">FEED: LIVE 30 FPS</span>
-                        <span>LATENCY: ~18ms</span>
+                        <span id="callStatusBadge">FEED: LIVE 60 FPS</span>
+                        <span>LATENCY: &lt;20ms</span>
                     </div>
                 </div>
             </div>

@@ -230,11 +230,47 @@ fun CyberAudioStudioModal(
                         modifier = Modifier.testTag("slider_speaker_volume")
                     )
 
-                    // Audio Routing Buttons (Speakerphone vs Earpiece)
+                    // Active Connected Audio Device Indicator
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (stats.hasHeadphones) CyberGreen.copy(alpha = 0.15f) else CyberCyan.copy(alpha = 0.1f))
+                            .border(1.dp, if (stats.hasHeadphones) CyberGreen.copy(alpha = 0.5f) else CyberCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("DETECTED HARDWARE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
+                        Text(
+                            text = stats.audioOutputDevice,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = if (stats.hasHeadphones) CyberGreen else CyberCyan
+                        )
+                    }
+
+                    // Audio Routing Buttons (Auto / Headphones vs Loudspeaker vs Earpiece)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        val isAuto = config.audioRouting == AudioRouting.AUTO
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isAuto) CyberGreen.copy(alpha = 0.2f) else CyberBorder.copy(alpha = 0.4f))
+                                .border(1.dp, if (isAuto) CyberGreen else CyberBorder, RoundedCornerShape(8.dp))
+                                .clickable { onAudioRoutingChanged(AudioRouting.AUTO) }
+                                .padding(vertical = 8.dp)
+                                .testTag("btn_routing_auto"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🎧 Auto", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = if (isAuto) CyberGreen else CyberTextSecondary)
+                        }
+
                         val isSpeaker = config.audioRouting == AudioRouting.SPEAKERPHONE
                         Box(
                             modifier = Modifier
@@ -247,7 +283,7 @@ fun CyberAudioStudioModal(
                                 .testTag("btn_routing_speaker"),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("🔊 Loud Speaker", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = if (isSpeaker) CyberGreen else CyberTextSecondary)
+                            Text("🔊 Speaker", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = if (isSpeaker) CyberGreen else CyberTextSecondary)
                         }
 
                         val isEarpiece = config.audioRouting == AudioRouting.EARPIECE
@@ -262,7 +298,7 @@ fun CyberAudioStudioModal(
                                 .testTag("btn_routing_earpiece"),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("👂 Private Earpiece", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = if (isEarpiece) CyberGreen else CyberTextSecondary)
+                            Text("👂 Ear", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = if (isEarpiece) CyberGreen else CyberTextSecondary)
                         }
                     }
                 }

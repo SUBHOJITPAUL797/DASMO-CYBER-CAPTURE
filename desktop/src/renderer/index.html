@@ -71,7 +71,7 @@
                             <span id="txtLiveStatus">DISCONNECTED</span>
                         </div>
                         <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);">
-                            <span id="activePhoneName">No Phone Active</span> · <span id="activePhoneIp" style="color: var(--text-secondary);">Connect on Wi-Fi</span>
+                            <span id="activePhoneName">No Phone Active</span> · <span id="activePhoneIp" style="color: var(--text-secondary);">Connect on Wi-Fi</span> · <span id="activeAudioDevice" style="color: var(--cyan);">🔊 Phone Speaker</span>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 11px;">
@@ -87,7 +87,7 @@
                     
                     <div class="viewfinder-hud">
                         <div class="hud-top">
-                            <span id="hudResolution">RES: 720p HD · 30 FPS</span>
+                            <span id="hudResolution">RES: 720p HD · 60 FPS</span>
                             <div style="display: flex; gap: 8px;">
                                 <button class="hud-btn" id="btnPopout">↗ Pop-Out Window</button>
                                 <button class="hud-btn" id="btnSnapshot">📸 Snapshot</button>
@@ -147,9 +147,15 @@
                             <input type="range" id="sliderSpeakerVol" min="0" max="1" step="0.05" value="0.85">
                         </div>
 
-                        <div style="display: flex; gap: 8px;">
-                            <button class="hud-btn" style="flex: 1; justify-content: center;" id="btnLoudspeaker">🔊 Loudspeaker</button>
-                            <button class="hud-btn" style="flex: 1; justify-content: center;" id="btnEarpiece">👂 Earpiece</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-family: var(--font-mono); margin: 2px 0 6px 0;">
+                            <span style="color: var(--text-secondary);">DETECTED OUTPUT:</span>
+                            <span id="txtAudioOutputDevice" style="color: var(--cyan); font-weight: 600;">🔊 Phone Speaker</span>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                            <button class="hud-btn" style="justify-content: center;" id="btnAutoAudio">🎧 Auto</button>
+                            <button class="hud-btn" style="justify-content: center;" id="btnLoudspeaker">🔊 Speaker</button>
+                            <button class="hud-btn" style="justify-content: center;" id="btnEarpiece">👂 Ear</button>
                         </div>
 
                         <button class="hud-btn" style="width: 100%; justify-content: center; margin-top: 4px; border-color: var(--cyan); color: var(--cyan);" id="btnStartAudioRelay">
@@ -192,20 +198,24 @@
             <div id="viewDrivers" class="view-panel" style="display: none; flex-direction: column; gap: 16px;">
                 <div class="card">
                     <div class="card-title">
-                        <span>NATIVE DESKTOP VIRTUAL CAMERA DRIVER</span>
-                        <span style="font-size: 10px; color: var(--green);">NAME: "DASMO CYBER CAPTURE"</span>
+                        <span>NATIVE DESKTOP VIRTUAL HARDWARE SUITE</span>
+                        <span style="font-size: 10px; color: var(--green);">DASMO CAMERA // DASMO MIC // DASMO SPEAKER</span>
                     </div>
                     <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
-                        This driver registers a virtual webcam directly named <b>"DASMO CYBER CAPTURE"</b> in Windows. All desktop software (WhatsApp Desktop, Zoom, Microsoft Teams, Google Meet, OBS Studio, Discord) will automatically detect it.
+                        This driver registers clean, branded virtual hardware in Windows: <b>DASMO CAMERA</b>, <b>DASMO MIC</b>, and <b>DASMO SPEAKER</b>. All desktop software (WhatsApp Desktop, Zoom, Microsoft Teams, Google Meet, OBS Studio, Discord) will detect them with clear names.
                     </p>
 
                     <div style="background: var(--surface-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                             <div>
                                 <b style="font-size: 13px; color: var(--text-primary);">Driver Status:</b>
                                 <div id="envStatusText" style="font-size: 11px; color: var(--cyan); font-family: var(--font-mono);">Checking environment...</div>
                             </div>
-                            <button class="hud-btn" id="btnInstallDeps">📦 Install Driver Dependencies</button>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                <button class="hud-btn" id="btnInstallDeps">📦 Install Dependencies</button>
+                                <button class="hud-btn glow" id="btnInstallCamDriver" style="background: rgba(0, 240, 255, 0.15); border-color: var(--cyan); color: var(--cyan);">🎥 1-Click Register Camera</button>
+                                <button class="hud-btn glow" id="btnConfigureDeviceNames" style="background: rgba(0, 255, 136, 0.15); border-color: var(--green); color: var(--green);">⚡ 1-Click Name Devices (DASMO MIC / SPEAKER / CAM)</button>
+                            </div>
                         </div>
                     </div>
 
@@ -219,18 +229,18 @@
                     <div style="background: var(--surface-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <b style="font-size: 13px; color: var(--text-primary);">Virtual Audio Driver:</b>
-                            <div style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">Adds Virtual Mic (Input) & Virtual Speaker (Output) to Windows</div>
+                            <div style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">Adds DASMO MIC (Input) & DASMO SPEAKER (Output) to Windows</div>
                         </div>
                         <button class="hud-btn" id="btnInstallAudioDriver">🎧 1-Click Install Audio Driver</button>
                     </div>
 
-                    <div class="card-title" style="margin-top: 10px;">WHATSAPP DESKTOP SETUP GUIDE</div>
+                    <div class="card-title" style="margin-top: 10px;">WHATSAPP / ZOOM / TEAMS SETUP GUIDE</div>
                     <div style="font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 10px; line-height: 1.5;">
                         <div>1. Click <b>"Start Virtual Cam"</b> on the dashboard.</div>
-                        <div>2. Open WhatsApp Desktop &gt; <b>Settings &gt; Audio & Video</b>.</div>
-                        <div>3. Under <b>Camera</b>, select <b>"DASMO CYBER CAPTURE"</b>.</div>
-                        <div>4. Under <b>Microphone</b>, select <b>"CABLE Output (VB-Audio Virtual Cable)"</b>.</div>
-                        <div>5. In Windows <b>Settings &gt; System &gt; Sound &gt; Volume mixer</b>, select <b>"CABLE Input"</b> as Output device to route PC sound to phone speaker.</div>
+                        <div>2. Open WhatsApp Desktop &gt; <b>Settings &gt; Audio & Video</b> (or Zoom / Teams Settings).</div>
+                        <div>3. Under <b>Camera</b>, select <b>"DASMO CAMERA"</b> (or "DASMO CYBER CAPTURE" / "Unity Video Capture").</div>
+                        <div>4. Under <b>Microphone</b>, select <b>"DASMO MIC"</b> (or "CABLE Output").</div>
+                        <div>5. In Windows <b>Settings &gt; System &gt; Sound &gt; Output</b>, select <b>"DASMO SPEAKER"</b> (or "CABLE Input") to stream PC audio directly out of your mobile phone.</div>
                     </div>
                 </div>
             </div>
@@ -254,10 +264,10 @@
                             <div style="font-size: 11px; color: var(--text-muted);">Target video resolution for phone sensor</div>
                         </div>
                         <select id="selResolution" style="background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 10px; border-radius: 6px; font-family: var(--font-mono);">
-                            <option value="HD_720P">720p HD @ 30 FPS (Recommended)</option>
-                            <option value="FHD_1080P">1080p FHD @ 30 FPS</option>
-                            <option value="SD_480P">480p SD (Power Saver)</option>
-                            <option value="UHD_4K">4K UHD High Detail</option>
+                            <option value="HD_720P">720p HD @ 60 FPS Ultra-Smooth (Recommended)</option>
+                            <option value="FHD_1080P">1080p FHD (Up to 60 FPS)</option>
+                            <option value="SD_480P">480p SD @ 60 FPS (Ultra Power Saver)</option>
+                            <option value="UHD_4K">4K UHD High Detail (30 FPS)</option>
                         </select>
                     </div>
 

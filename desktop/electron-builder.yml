@@ -3,7 +3,7 @@ productName: DASMO CYBER CAPTURE
 copyright: Copyright © 2026 DASMO CYBER CAPTURE / AirLink Pro
 
 directories:
-  output: dist
+  output: dist-msi
   buildResources: build
 
 files:
@@ -21,6 +21,9 @@ extraResources:
 
 win:
   target:
+    - target: msi
+      arch:
+        - x64
     - target: dir
       arch:
         - x64
@@ -33,6 +36,14 @@ win:
   signAndEditExecutable: false
   icon: src/renderer/assets/icon.png
   requestedExecutionLevel: asInvoker
+
+msi:
+  oneClick: false
+  perMachine: true
+  runAfterFinish: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DASMO CYBER CAPTURE
 
 nsis:
   oneClick: false

@@ -20,7 +20,9 @@ debug.keystore
 # Desktop Electron & Node
 desktop/node_modules/
 desktop/dist/
+desktop/dist-msi/
 desktop/.icon-ico/
+**/__pycache__/
 
 # Built Binaries
 *.apk

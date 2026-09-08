@@ -115,8 +115,10 @@ object CyberUpdateManager {
     private fun isNewerVersion(latest: String, current: String): Boolean {
         if (latest.isEmpty()) return false
         try {
-            val latestParts = latest.split(".").map { it.toIntOrNull() ?: 0 }
-            val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
+            val cleanLatest = latest.replace("v", "", ignoreCase = true).trim()
+            val cleanCurrent = current.replace("v", "", ignoreCase = true).trim()
+            val latestParts = cleanLatest.split(".").map { it.toIntOrNull() ?: 0 }
+            val currentParts = cleanCurrent.split(".").map { it.toIntOrNull() ?: 0 }
 
             val maxLen = maxOf(latestParts.size, currentParts.size)
             for (i in 0 until maxLen) {
@@ -126,7 +128,7 @@ object CyberUpdateManager {
                 if (l < c) return false
             }
         } catch (_: Exception) {
-            return latest != current
+            return latest.trim() != current.trim()
         }
         return false
     }

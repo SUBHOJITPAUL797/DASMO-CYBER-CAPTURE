@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
     // Virtual Camera Driver Bridge
     checkDriverEnvironment: () => ipcRenderer.invoke('driver:check-env'),
     installDriverDependencies: () => ipcRenderer.invoke('driver:install-deps'),
+    installCameraDriver: () => ipcRenderer.invoke('driver:install-cam-driver'),
+    configureDeviceNames: () => ipcRenderer.invoke('driver:configure-device-names'),
     installAudioDriver: () => ipcRenderer.invoke('driver:install-audio'),
     startVirtualCamera: (phoneIp) => ipcRenderer.invoke('driver:start-cam', phoneIp),
     stopVirtualCamera: () => ipcRenderer.invoke('driver:stop-cam'),

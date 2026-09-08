@@ -320,9 +320,7 @@ fun CyberSettingsScreen(
                         Button(
                             onClick = {
                                 onCheckUpdatesClick?.invoke()
-                                if (updateInfo.isUpdateAvailable) {
-                                    showUpdateModal = true
-                                }
+                                showUpdateModal = true
                             },
                             modifier = Modifier.fillMaxWidth().testTag("btn_check_updates_settings"),
                             shape = RoundedCornerShape(8.dp),
@@ -354,7 +352,7 @@ fun CyberSettingsScreen(
         }
     }
 
-    if (showUpdateModal && updateInfo.isUpdateAvailable) {
+    if (showUpdateModal && (updateInfo.isUpdateAvailable || updateInfo.latestVersion.isNotEmpty())) {
         CyberUpdateModal(
             updateInfo = updateInfo,
             downloadState = downloadState,

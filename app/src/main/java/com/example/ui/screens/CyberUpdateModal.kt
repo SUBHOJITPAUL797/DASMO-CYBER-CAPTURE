@@ -162,15 +162,15 @@ fun CyberUpdateModal(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(CyberGreen.copy(alpha = 0.2f))
+                            .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.2f) else CyberCyan.copy(alpha = 0.2f))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "OTA READY",
+                            text = if (updateInfo.isUpdateAvailable) "OTA UPDATE READY" else "CURRENT / INSTALLED",
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            color = CyberGreen
+                            color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberCyan
                         )
                     }
                 }
@@ -393,8 +393,10 @@ fun CyberUpdateModal(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
-                                    val url = updateInfo.apkDownloadUrl.ifEmpty { updateInfo.releaseUrl }
-                                    if (url.endsWith(".apk")) {
+                                    val apkUrl = updateInfo.apkDownloadUrl
+                                    val fallbackUrl = updateInfo.releaseUrl
+                                    val url = if (apkUrl.isNotEmpty()) apkUrl else fallbackUrl
+                                    if (apkUrl.isNotEmpty() || url.lowercase().contains(".apk")) {
                                         onStartDownload(url)
                                     } else {
                                         CyberUpdateManager.openUpdateLink(context, url)
@@ -409,7 +411,12 @@ fun CyberUpdateModal(
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.size(8.dp))
-                                Text("DOWNLOAD & UPDATE IN-APP", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(
+                                    text = if (updateInfo.isUpdateAvailable) "DOWNLOAD & UPDATE IN-APP" else "RE-INSTALL / UPDATE IN-APP",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
                             }
 
                             if (updateInfo.msiDownloadUrl.isNotEmpty()) {

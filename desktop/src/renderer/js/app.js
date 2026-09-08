@@ -4,8 +4,25 @@ let isVideoPaused = false;
 let isMicMuted = false;
 let isSpeakerOn = true;
 let isDriverRunning = false;
+let isAudioRelayRunning = false;
 let statusPollInterval = null;
 let streamViewer = null;
+
+function updateAudioRelayUI(running) {
+    isAudioRelayRunning = running;
+    const btn = document.getElementById('btnStartAudioRelay');
+    const lbl = document.getElementById('lblAudioRelayBtn');
+    if (!btn || !lbl) return;
+    if (running) {
+        btn.style.background = 'var(--cyan)';
+        btn.style.color = '#000';
+        lbl.innerText = 'Stop PC ➔ Phone Speaker Relay';
+    } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--cyan)';
+        lbl.innerText = 'Start PC ➔ Phone Speaker Relay';
+    }
+}
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,10 +81,33 @@ function initWindowControls() {
         }
     });
 
-    document.getElementById('btnSnapshot')?.addEventListener('click', () => {
-        if (activeDevice) {
-            window.dasmoAPI?.openExternal(activeDevice.snapshotUrl);
+    document.getElementById('btnSnapshot')?.addEventListener('click', async () => {
+        if (!activeDevice) {
+            alert('Please connect to a phone first.');
+            return;
         }
+        const btn = document.getElementById('btnSnapshot');
+        const origText = btn ? btn.innerText : '📸 Snapshot';
+        if (btn) btn.innerText = '📸 Saving...';
+        try {
+            const snapUrl = `${activeDevice.snapshotUrl}?_t=${Date.now()}`;
+            const res = await fetch(snapUrl);
+            if (!res.ok) throw new Error('Fetch failed');
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `DASMO_SNAPSHOT_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            if (btn) btn.innerText = '✓ Saved!';
+        } catch (_) {
+            window.dasmoAPI?.openExternal(activeDevice.snapshotUrl);
+            if (btn) btn.innerText = '✓ Opened!';
+        }
+        setTimeout(() => { if (btn) btn.innerText = origText; }, 2000);
     });
 }
 
@@ -283,6 +323,23 @@ function connectToDevice(device) {
         }
     }
 
+    // Auto-start Audio Bridge: Phone Mic → PC (DASMO MIC) + PC Audio → Phone Speaker (DASMO SPEAKER)
+    if (!isAudioRelayRunning) {
+        window.dasmoAPI?.startAudioBridge(`${device.ip}:${device.port}`);
+        updateAudioRelayUI(true);
+    }
+
+    // Auto-start Virtual Camera: Phone Camera → PC (DASMO CAMERA) for WhatsApp/Zoom/Teams
+    if (!isDriverRunning && window.dasmoAPI) {
+        window.dasmoAPI.startVirtualCamera(`${device.ip}:${device.port}`);
+        isDriverRunning = true;
+        const btn = document.getElementById('btnStartDriver');
+        const lbl = document.getElementById('lblStartDriver');
+        if (btn) btn.style.background = 'var(--cyan)';
+        if (btn) btn.style.color = '#000';
+        if (lbl) lbl.innerText = 'Stop DASMO CAMERA Driver';
+    }
+
     renderDiscoveredDevices();
     startStatusPolling();
 }
@@ -356,6 +413,10 @@ function initHardwareControls() {
         sendControlThrottled('volume', val);
     });
 
+    document.getElementById('btnAutoAudio')?.addEventListener('click', () => {
+        sendControl('routing', 'AUTO');
+    });
+
     document.getElementById('btnLoudspeaker')?.addEventListener('click', () => {
         sendControl('routing', 'SPEAKERPHONE');
     });
@@ -364,32 +425,75 @@ function initHardwareControls() {
         sendControl('routing', 'EARPIECE');
     });
 
-    let isAudioRelayRunning = false;
     document.getElementById('btnStartAudioRelay')?.addEventListener('click', () => {
         if (!activeDevice) {
             alert('Please connect to your phone first.');
             return;
         }
-        isAudioRelayRunning = !isAudioRelayRunning;
-        const btn = document.getElementById('btnStartAudioRelay');
-        const lbl = document.getElementById('lblAudioRelayBtn');
-
-        if (isAudioRelayRunning) {
+        if (!isAudioRelayRunning) {
             window.dasmoAPI?.startAudioBridge(activeDevice.ip);
-            btn.style.background = 'var(--cyan)';
-            btn.style.color = '#000';
-            lbl.innerText = 'Stop PC ➔ Phone Speaker Relay';
+            updateAudioRelayUI(true);
         } else {
             window.dasmoAPI?.stopAudioBridge();
-            btn.style.background = 'transparent';
-            btn.style.color = 'var(--cyan)';
-            lbl.innerText = 'Start PC ➔ Phone Speaker Relay';
+            updateAudioRelayUI(false);
         }
     });
 
     // Virtual Camera Driver Button
     document.getElementById('btnStartDriver')?.addEventListener('click', () => {
         toggleVirtualCameraDriver();
+    });
+
+    // 🎥 1-Click Register Camera
+    document.getElementById('btnInstallCamDriver')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btnInstallCamDriver');
+        btn.innerText = 'Registering...';
+        try {
+            await window.dasmoAPI?.installCameraDriver();
+            btn.innerText = '✓ Camera Registered';
+        } catch (e) {
+            btn.innerText = 'Error Registering';
+        }
+        setTimeout(() => { btn.innerText = '🎥 1-Click Register Camera'; }, 3000);
+    });
+
+    // ⚡ 1-Click Name Devices (DASMO CAMERA / MIC / SPEAKER)
+    document.getElementById('btnConfigureDeviceNames')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btnConfigureDeviceNames');
+        btn.innerText = 'Naming Devices...';
+        try {
+            await window.dasmoAPI?.configureDeviceNames();
+            btn.innerText = '✓ Devices Named';
+        } catch (e) {
+            btn.innerText = 'Error Naming';
+        }
+        setTimeout(() => { btn.innerText = '⚡ 1-Click Name Devices (DASMO MIC / SPEAKER / CAM)'; }, 3000);
+    });
+
+    // 🎧 1-Click Install Audio Driver
+    document.getElementById('btnInstallAudioDriver')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btnInstallAudioDriver');
+        btn.innerText = 'Installing Audio...';
+        try {
+            await window.dasmoAPI?.installAudioDriver();
+            btn.innerText = '✓ Driver Setup Launched';
+        } catch (e) {
+            btn.innerText = 'Error Installing';
+        }
+        setTimeout(() => { btn.innerText = '🎧 1-Click Install Audio Driver'; }, 3000);
+    });
+
+    // 📦 Install Dependencies
+    document.getElementById('btnInstallDeps')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btnInstallDeps');
+        btn.innerText = 'Installing Packages...';
+        try {
+            await window.dasmoAPI?.installDriverDependencies();
+            btn.innerText = '✓ Packages Installed';
+        } catch (e) {
+            btn.innerText = 'Error Installing';
+        }
+        setTimeout(() => { btn.innerText = '📦 Install Dependencies'; }, 3000);
     });
 }
 
@@ -423,16 +527,18 @@ function startStatusPolling() {
 
     statusPollInterval = setInterval(async () => {
         if (!activeDevice) return;
+        const pingStart = performance.now();
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 1800);
-            const res = await fetch(`http://${activeDevice.ip}:${activeDevice.port}/status.json`, {
+            const res = await fetch(`http://${activeDevice.ip}:${activeDevice.port}/status.json?_t=${Date.now()}`, {
                 cache: 'no-store',
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
 
             if (res.ok) {
+                const rtt = Math.round(performance.now() - pingStart);
                 const data = await res.json();
                 consecutiveFailures = 0;
 
@@ -459,6 +565,15 @@ function startStatusPolling() {
                     }
                 }
 
+                // Update Latency (RTT)
+                const telLatency = document.getElementById('telLatency');
+                if (telLatency) telLatency.innerText = `${rtt}ms`;
+                const hudLatency = document.getElementById('hudLatency');
+                if (hudLatency) {
+                    hudLatency.innerText = `LATENCY: <${Math.max(12, rtt)}ms (Real-Time)`;
+                    hudLatency.style.color = rtt < 45 ? 'var(--green)' : (rtt < 100 ? 'var(--amber)' : 'var(--red)');
+                }
+
                 // Update FPS & Bitrate from real live telemetry
                 const fpsVal = typeof data.fps === 'number' ? data.fps.toFixed(1) : (data.fps || '30.0');
                 const telFps = document.getElementById('telFps');
@@ -472,7 +587,55 @@ function startStatusPolling() {
                 const telClients = document.getElementById('telClients');
                 if (telClients) telClients.innerText = `${data.clients || 1} PC`;
 
-                // Real Hardware Microphone RMS Decibel Meter
+                // Update Device Name / Model
+                if (data.device_name) {
+                    const devNameEl = document.getElementById('activePhoneName');
+                    if (devNameEl && devNameEl.innerText !== data.device_name) {
+                        devNameEl.innerText = data.device_name;
+                    }
+                }
+
+                // Battery Telemetry & Temperature
+                const telBattery = document.getElementById('telBattery');
+                if (telBattery && data.battery_pct !== undefined) {
+                    const temp = (data.battery_temp && data.battery_temp > 0) ? ` (${Math.round(data.battery_temp)}°C)` : '';
+                    telBattery.innerText = `${data.battery_pct}%${temp}`;
+                }
+
+                // Resolution
+                if (data.resolution) {
+                    const hudRes = document.getElementById('hudResolution');
+                    if (hudRes) hudRes.innerText = `RES: ${data.resolution} · ${fpsVal} FPS`;
+                }
+
+                // Zoom Bidirectional Sync
+                const sliderZoom = document.getElementById('sliderZoom');
+                if (data.zoom_ratio !== undefined && document.activeElement !== sliderZoom) {
+                    const zoomVal = Number(data.zoom_ratio).toFixed(1);
+                    if (sliderZoom) sliderZoom.value = zoomVal;
+                    const valZoom = document.getElementById('valZoom');
+                    if (valZoom) valZoom.innerText = `${zoomVal}x`;
+                    const hudZoom = document.getElementById('hudZoomLabel');
+                    if (hudZoom) hudZoom.innerText = `ZOOM: ${zoomVal}x`;
+                }
+
+                // Torch State Bidirectional Sync
+                if (data.is_torch_on !== undefined) {
+                    const btnTorch = document.getElementById('btnTorch');
+                    if (btnTorch) {
+                        if (data.is_torch_on) {
+                            btnTorch.classList.add('active');
+                            btnTorch.style.borderColor = 'var(--cyan)';
+                            btnTorch.style.color = 'var(--cyan)';
+                        } else {
+                            btnTorch.classList.remove('active');
+                            btnTorch.style.borderColor = '';
+                            btnTorch.style.color = '';
+                        }
+                    }
+                }
+
+                // Hardware Microphone RMS Decibel Meter
                 const micMuted = data.is_mic_muted !== undefined ? data.is_mic_muted : isMicMuted;
                 const vuBar = document.getElementById('vuMeterBar');
                 const micTxt = document.getElementById('txtMicLevel');
@@ -487,7 +650,7 @@ function startStatusPolling() {
                     if (micTxt) micTxt.innerText = `${db.toFixed(1)} dB`;
                 }
 
-                // If phone paused video, show privacy state in UI
+                // Privacy Video Pause Sync
                 if (data.is_video_paused !== undefined && data.is_video_paused !== isVideoPaused) {
                     isVideoPaused = data.is_video_paused;
                     const btn = document.getElementById('btnPauseVideo');
@@ -499,6 +662,71 @@ function startStatusPolling() {
                         btn?.classList.remove('danger');
                         if (lbl) lbl.innerText = 'Pause Video';
                     }
+                }
+
+                // Mic Mute State Sync
+                if (data.is_mic_muted !== undefined && data.is_mic_muted !== isMicMuted) {
+                    isMicMuted = data.is_mic_muted;
+                    const btn = document.getElementById('btnMuteMic');
+                    const lbl = document.getElementById('lblMuteMic');
+                    if (isMicMuted) {
+                        btn?.classList.add('danger');
+                        if (lbl) lbl.innerText = 'Unmute Mic';
+                    } else {
+                        btn?.classList.remove('danger');
+                        if (lbl) lbl.innerText = 'Mute Mic';
+                    }
+                }
+
+                // Speaker State Sync
+                if (data.is_speaker_on !== undefined && data.is_speaker_on !== isSpeakerOn) {
+                    isSpeakerOn = data.is_speaker_on;
+                    const lblSpeaker = document.getElementById('lblSpeaker');
+                    if (lblSpeaker) lblSpeaker.innerText = isSpeakerOn ? 'Speaker: ON' : 'Speaker: OFF';
+                }
+
+                // Mic Gain & Speaker Volume Sync (when user not dragging slider)
+                const sliderGain = document.getElementById('sliderGain');
+                if (data.mic_gain !== undefined && document.activeElement !== sliderGain) {
+                    const gainVal = Number(data.mic_gain).toFixed(1);
+                    if (sliderGain) sliderGain.value = gainVal;
+                    const valGain = document.getElementById('valGain');
+                    if (valGain) valGain.innerText = `${gainVal}x`;
+                }
+                const sliderSpeakerVol = document.getElementById('sliderSpeakerVol');
+                if (data.speaker_volume !== undefined && document.activeElement !== sliderSpeakerVol) {
+                    const volVal = Number(data.speaker_volume);
+                    if (sliderSpeakerVol) sliderSpeakerVol.value = volVal;
+                    const valSpeakerVol = document.getElementById('valSpeakerVol');
+                    if (valSpeakerVol) valSpeakerVol.innerText = `${Math.round(volVal * 100)}%`;
+                }
+
+                // Connected Audio Output Device & Routing Telemetry Sync
+                const audioDevName = data.audio_output_name || data.audio_output_device || 'Phone Speaker';
+                const hasHp = data.has_headphones === true;
+                const activeAudioDeviceEl = document.getElementById('activeAudioDevice');
+                if (activeAudioDeviceEl) {
+                    activeAudioDeviceEl.innerText = audioDevName;
+                    activeAudioDeviceEl.style.color = hasHp ? 'var(--green)' : 'var(--cyan)';
+                }
+                const txtAudioOutputDeviceEl = document.getElementById('txtAudioOutputDevice');
+                if (txtAudioOutputDeviceEl) {
+                    txtAudioOutputDeviceEl.innerText = audioDevName;
+                    txtAudioOutputDeviceEl.style.color = hasHp ? 'var(--green)' : 'var(--cyan)';
+                }
+
+                // Highlight active routing button
+                const curRouting = (data.audio_routing || 'AUTO').toUpperCase();
+                const btnAuto = document.getElementById('btnAutoAudio');
+                const btnSpk = document.getElementById('btnLoudspeaker');
+                const btnEar = document.getElementById('btnEarpiece');
+                if (btnAuto && btnSpk && btnEar) {
+                    btnAuto.style.borderColor = curRouting === 'AUTO' ? 'var(--green)' : '';
+                    btnAuto.style.color = curRouting === 'AUTO' ? 'var(--green)' : '';
+                    btnSpk.style.borderColor = curRouting === 'SPEAKERPHONE' ? 'var(--green)' : '';
+                    btnSpk.style.color = curRouting === 'SPEAKERPHONE' ? 'var(--green)' : '';
+                    btnEar.style.borderColor = curRouting === 'EARPIECE' ? 'var(--green)' : '';
+                    btnEar.style.color = curRouting === 'EARPIECE' ? 'var(--green)' : '';
                 }
             } else {
                 throw new Error('HTTP ' + res.status);
@@ -560,6 +788,18 @@ async function checkDriverEnv() {
         }
     });
 
+    document.getElementById('btnInstallCamDriver')?.addEventListener('click', async () => {
+        envText.innerText = 'Launching Camera Driver registration (UAC prompt)...';
+        try {
+            await window.dasmoAPI.installCameraDriver();
+            envText.innerText = '✓ DirectShow Virtual Camera registration launched! Check Windows prompt.';
+            envText.style.color = 'var(--green)';
+        } catch (e) {
+            envText.innerText = `Driver registration error: ${e.message}`;
+            envText.style.color = 'var(--red)';
+        }
+    });
+
     document.getElementById('btnInstallAudioDriver')?.addEventListener('click', () => {
         window.dasmoAPI?.installAudioDriver();
     });
@@ -586,10 +826,15 @@ function toggleVirtualCameraDriver() {
         return;
     }
 
+    const deviceAddress = `${activeDevice.ip}:${activeDevice.port || 8080}`;
     if (!isDriverRunning) {
-        window.dasmoAPI?.startVirtualCamera(activeDevice.ip);
+        window.dasmoAPI?.startVirtualCamera(deviceAddress);
+        window.dasmoAPI?.startAudioBridge(deviceAddress);
+        updateAudioRelayUI(true);
     } else {
         window.dasmoAPI?.stopVirtualCamera();
+        window.dasmoAPI?.stopAudioBridge();
+        updateAudioRelayUI(false);
     }
 }
 
@@ -723,7 +968,6 @@ class UltraLowLatencyStreamViewer {
                 wsOpened = true;
                 clearTimeout(timeout);
                 this.mode = 'ws';
-                this._showCanvas();
                 console.log('[StreamViewer] WebSocket connected! Zero-queue real-time video active.');
             };
 
@@ -765,7 +1009,6 @@ class UltraLowLatencyStreamViewer {
 
     async _startFetchStream(device) {
         this.mode = 'fetch';
-        this._showCanvas();
         console.log('[StreamViewer] Starting zero-queue Fetch ReadableStream reader...');
 
         this.fetchAbort = new AbortController();
@@ -851,7 +1094,7 @@ class UltraLowLatencyStreamViewer {
     _fallbackToImg(device) {
         this.mode = 'img';
         this._showImg();
-        if (this.img) {
+        if (this.img && device) {
             this.img.src = `${device.streamUrl}?_t=${Date.now()}`;
         }
     }
@@ -875,6 +1118,9 @@ class UltraLowLatencyStreamViewer {
                     }
 
                     this.ctx.drawImage(bitmap, 0, 0);
+                    if (this.renderCount === 0) {
+                        this._showCanvas();
+                    }
                     bitmap.close(); // Immediate GPU texture & memory release
 
                     this.renderCount++;
@@ -885,7 +1131,10 @@ class UltraLowLatencyStreamViewer {
                         this.lastFpsMeasure = now;
                     }
                 } catch (e) {
-                    // Ignored: transient packet boundary or format transition
+                    console.warn('[StreamViewer] Render error:', e);
+                    if (this.renderCount === 0 && this.connectedDevice) {
+                        this._fallbackToImg(this.connectedDevice);
+                    }
                 }
             }
 

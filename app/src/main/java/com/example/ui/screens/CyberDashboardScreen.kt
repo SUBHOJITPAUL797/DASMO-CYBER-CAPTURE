@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -157,6 +159,58 @@ fun CyberDashboardScreen(
                         stats = stats,
                         config = config
                     )
+
+                    // Live AirLink Connection Status Banner
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (stats.connectedClients > 0) CyberGreen.copy(alpha = 0.14f) else CyberSurface,
+                        border = BorderStroke(1.dp, if (stats.connectedClients > 0) CyberGreen.copy(alpha = 0.8f) else CyberCyan.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth().testTag("banner_airlink_status")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (stats.connectedClients > 0) CyberGreen else CyberCyan)
+                                )
+                                Text(
+                                    text = if (stats.connectedClients > 0) "AIR LINK ACTIVE · CONNECTED TO PC" else "AIR LINK READY · OPEN PC SOFTWARE",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (stats.connectedClients > 0) CyberGreen else CyberTextPrimary
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = stats.audioOutputDevice,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (stats.hasHeadphones) CyberGreen else CyberCyan
+                                )
+                                Text(
+                                    text = if (stats.connectedClients > 0) "${stats.connectedClients} CLIENT" else "${stats.serverIp}:${stats.serverPort}",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyberCyan
+                                )
+                            }
+                        }
+                    }
 
                     // In-App OTA Update Prompt Banner
                     AnimatedVisibility(

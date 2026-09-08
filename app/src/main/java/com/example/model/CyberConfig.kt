@@ -18,15 +18,16 @@ enum class CameraFacing {
 }
 
 enum class StreamResolution(val label: String, val width: Int, val height: Int, val desc: String) {
-    SD_480P("480p SD", 640, 480, "Low bandwidth / Power saver"),
-    HD_720P("720p HD", 1280, 720, "Optimal 30fps balanced (Recommended)"),
-    FHD_1080P("1080p FHD", 1920, 1080, "Crisp high-definition pro stream"),
-    UHD_4K("4K UHD", 3840, 2160, "Maximum optical sensor detail")
+    SD_480P("480p SD", 640, 480, "Low bandwidth / 60 FPS Ultra Power Saver"),
+    HD_720P("720p HD", 1280, 720, "Optimal 60 FPS Ultra-Smooth (Recommended)"),
+    FHD_1080P("1080p FHD", 1920, 1080, "Crisp high-definition pro stream (Up to 60 FPS)"),
+    UHD_4K("4K UHD", 3840, 2160, "Maximum optical sensor detail (30 FPS)")
 }
 
-enum class AudioRouting {
-    SPEAKERPHONE,
-    EARPIECE
+enum class AudioRouting(val label: String) {
+    AUTO("Auto / Headphones"),
+    SPEAKERPHONE("Phone Loudspeaker"),
+    EARPIECE("Private Earpiece")
 }
 
 data class CyberStreamStats(
@@ -43,12 +44,14 @@ data class CyberStreamStats(
     val isStreaming: Boolean = false,
     val wifiSsid: String = "Wi-Fi LAN",
     val serverIp: String = "127.0.0.1",
-    val serverPort: Int = 8080
+    val serverPort: Int = 8080,
+    val audioOutputDevice: String = "Phone Speaker",
+    val hasHeadphones: Boolean = false
 )
 
 data class CyberConfig(
     val resolution: StreamResolution = StreamResolution.HD_720P,
-    val targetFps: Int = 30,
+    val targetFps: Int = 60,
     val cameraFacing: CameraFacing = CameraFacing.BACK,
     val isTorchOn: Boolean = false,
     val zoomFactor: Float = 1.0f,
@@ -67,7 +70,7 @@ data class CyberConfig(
     // Audio receiver (PC Call Audio -> Phone Speaker Output)
     val isSpeakerEnabled: Boolean = true,
     val speakerVolume: Float = 0.85f,
-    val audioRouting: AudioRouting = AudioRouting.SPEAKERPHONE,
+    val audioRouting: AudioRouting = AudioRouting.AUTO,
     
     // Network & Server
     val serverPort: Int = 8080,

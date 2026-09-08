@@ -18,14 +18,14 @@ class ExampleUnitTest {
   fun `test default CyberConfig settings`() {
     val config = com.example.model.CyberConfig()
     assertEquals(com.example.model.StreamResolution.HD_720P, config.resolution)
-    assertEquals(30, config.targetFps)
+    assertEquals(60, config.targetFps)
     assertEquals(com.example.model.CameraFacing.BACK, config.cameraFacing)
     assertFalse(config.isTorchOn)
     assertEquals(1.0f, config.zoomFactor, 0.001f)
     assertFalse(config.isVideoPaused)
     assertFalse(config.isMicMuted)
     assertTrue(config.isSpeakerEnabled)
-    assertEquals(com.example.model.AudioRouting.SPEAKERPHONE, config.audioRouting)
+    assertEquals(com.example.model.AudioRouting.AUTO, config.audioRouting)
     assertEquals(8080, config.serverPort)
   }
 

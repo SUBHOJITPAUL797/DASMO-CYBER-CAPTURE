@@ -105,7 +105,7 @@ class HardwareDriverBridge extends EventEmitter {
 
         return new Promise((resolve, reject) => {
             // Use resolved python path with -m pip
-            const child = exec(`${pythonCmd} -m pip install --quiet opencv-python pyvirtualcam sounddevice numpy`, (err, stdout, stderr) => {
+            const child = exec(`${pythonCmd} -m pip install --quiet opencv-python pyvirtualcam sounddevice PyAudioWPatch numpy`, (err, stdout, stderr) => {
                 if (err) {
                     return reject(new Error(stderr || err.message));
                 }
@@ -133,8 +133,9 @@ class HardwareDriverBridge extends EventEmitter {
         }
 
         try {
-            this.bridgeProcess = spawn(this.pythonPath, [scriptPath, phoneIp], {
-                stdio: ['pipe', 'pipe', 'pipe']
+            this.bridgeProcess = spawn(this.pythonPath, [scriptPath, phoneIp, '60'], {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' }
             });
 
             this.isActive = true;
@@ -192,14 +193,25 @@ class HardwareDriverBridge extends EventEmitter {
 
         try {
             this.audioProcess = spawn(this.pythonPath, [scriptPath, phoneIp], {
-                stdio: ['pipe', 'pipe', 'pipe']
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' }
             });
 
             this.audioProcess.stdout.on('data', (d) => {
                 console.log('[Audio Bridge]', d.toString());
             });
 
-            this.audioProcess.on('exit', () => {
+            this.audioProcess.stderr.on('data', (d) => {
+                console.warn('[Audio Bridge Warning/Err]', d.toString());
+            });
+
+            this.audioProcess.on('exit', (code) => {
+                console.log(`[Audio Bridge] Process exited with code ${code}`);
+                this.audioProcess = null;
+            });
+
+            this.audioProcess.on('error', (err) => {
+                console.error('[Audio Bridge Process Error]', err);
                 this.audioProcess = null;
             });
         } catch (e) {

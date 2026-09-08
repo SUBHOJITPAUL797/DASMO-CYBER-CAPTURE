@@ -83,9 +83,23 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         updateNetworkInfo()
         generatePairingQrCode()
         checkAppUpdates()
+
+        viewModelScope.launch {
+            audioEngine.connectedAudioDeviceName.collect { devName ->
+                _stats.value = _stats.value.copy(audioOutputDevice = devName)
+            }
+        }
+        viewModelScope.launch {
+            audioEngine.isHeadphoneConnected.collect { hasHp ->
+                _stats.value = _stats.value.copy(hasHeadphones = hasHp)
+            }
+        }
     }
 
     fun checkAppUpdates(isManual: Boolean = false, onComplete: ((com.example.updater.AppUpdateInfo) -> Unit)? = null) {
+        if (isManual) {
+            _toastMessage.value = "Checking for updates..."
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val appVer = try {
                 val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
@@ -199,7 +213,11 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
             telemetryProvider = {
                 val stats = _stats.value
                 val cfg = _config.value
+                val devName = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}"
                 JSONObject().apply {
+                    put("device_name", devName)
+                    put("model", android.os.Build.MODEL)
+                    put("manufacturer", android.os.Build.MANUFACTURER)
                     put("fps", stats.fps)
                     put("mic_db", stats.micLevelDb)
                     put("battery_pct", stats.batteryPercent)
@@ -208,6 +226,18 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                     put("is_video_paused", cfg.isVideoPaused)
                     put("is_mic_muted", cfg.isMicMuted)
                     put("is_speaker_on", cfg.isSpeakerEnabled)
+                    put("is_torch_on", cfg.isTorchOn)
+                    put("zoom_ratio", cfg.zoomFactor)
+                    put("zoom_factor", cfg.zoomFactor)
+                    put("facing", cfg.cameraFacing.name)
+                    put("camera_facing", cfg.cameraFacing.name)
+                    put("mic_gain", cfg.micGain)
+                    put("speaker_volume", cfg.speakerVolume)
+                    put("audio_routing", cfg.audioRouting.name)
+                    put("audio_routing_label", cfg.audioRouting.label)
+                    put("audio_output_device", stats.audioOutputDevice)
+                    put("audio_output_name", stats.audioOutputDevice)
+                    put("has_headphones", stats.hasHeadphones)
                     put("active_filter", cfg.activeFilter.name)
                     put("resolution", cfg.resolution.label)
                 }
@@ -296,7 +326,9 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                     isStreaming = true,
                     uptimeSeconds = uptime,
                     serverIp = ip,
-                    wifiSsid = ssid
+                    wifiSsid = ssid,
+                    audioOutputDevice = audioEngine.connectedAudioDeviceName.value,
+                    hasHeadphones = audioEngine.isHeadphoneConnected.value
                 )
 
                 delay(1000)
@@ -433,7 +465,13 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                 }
                 "routing" -> {
                     try {
-                        setAudioRouting(AudioRouting.valueOf(value))
+                        val parsed = when (value.trim().uppercase()) {
+                            "AUTO", "HEADPHONES", "HEADPHONE" -> AudioRouting.AUTO
+                            "SPEAKERPHONE", "SPEAKER", "LOUDSPEAKER" -> AudioRouting.SPEAKERPHONE
+                            "EARPIECE", "EAR" -> AudioRouting.EARPIECE
+                            else -> AudioRouting.valueOf(value.trim().uppercase())
+                        }
+                        setAudioRouting(parsed)
                     } catch (_: Exception) {}
                 }
                 "gain" -> {
@@ -443,11 +481,25 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                     value.toFloatOrNull()?.let { setSpeakerVolume(it) }
                 }
                 "flip" -> switchCamera()
-                "torch" -> toggleTorch()
+                "torch" -> {
+                    if (value.isNotEmpty()) {
+                        val wantTorch = value.toBoolean()
+                        if (_config.value.isTorchOn != wantTorch) {
+                            toggleTorch()
+                        }
+                    } else {
+                        toggleTorch()
+                    }
+                }
                 "zoom" -> value.toFloatOrNull()?.let { setZoom(it) }
                 "filter" -> {
                     try {
                         setFilter(CyberFilter.valueOf(value))
+                    } catch (_: Exception) {}
+                }
+                "resolution" -> {
+                    try {
+                        setResolution(StreamResolution.valueOf(value))
                     } catch (_: Exception) {}
                 }
             }
