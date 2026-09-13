@@ -232,13 +232,8 @@ class PcToPhoneSpeakerTransmitter:
         loopback_dev = None
         try:
             cur_def = p.get_default_wasapi_loopback()
-            # CRITICAL: Prevent self-capture feedback loop!
-            # If default loopback is VB-Cable / Virtual Cable, DO NOT capture it,
-            # because PhoneMicToPcReceiver injects phone mic into VB-Cable!
-            if cur_def and not any(k in cur_def['name'].lower() for k in ['cable', 'virtual', 'vb-audio']):
+            if cur_def:
                 loopback_dev = cur_def
-            elif cur_def:
-                print(f"[!] Notice: Default loopback is virtual '{cur_def['name']}'. Searching for physical speakers...", flush=True)
         except Exception:
             pass
 
@@ -346,9 +341,8 @@ class PcToPhoneSpeakerTransmitter:
                 try:
                     cur_def = p.get_default_wasapi_loopback()
                     if cur_def and cur_def['index'] != loopback_dev['index']:
-                        if not any(k in cur_def['name'].lower() for k in ['cable', 'virtual', 'vb-audio']):
-                            print(f"[*] Windows Sound Output changed to: '{cur_def['name']}'. Re-attaching capture...", flush=True)
-                            break
+                        print(f"[*] Windows Sound Output changed to: '{cur_def['name']}'. Re-attaching capture...", flush=True)
+                        break
                 except Exception:
                     pass
         finally:

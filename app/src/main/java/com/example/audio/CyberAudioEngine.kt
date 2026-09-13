@@ -343,10 +343,6 @@ class CyberAudioEngine(private val context: Context) {
                 val attrBuilder = AudioAttributes.Builder()
                     .setUsage(usage)
                     .setContentType(contentType)
-                
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    attrBuilder.setFlags(AudioAttributes.FLAG_LOW_LATENCY)
-                }
 
                 val trackBuilder = AudioTrack.Builder()
                     .setAudioAttributes(attrBuilder.build())
@@ -388,7 +384,7 @@ class CyberAudioEngine(private val context: Context) {
             if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                 audioTrack?.setVolume(volume.coerceIn(0f, 1f))
                 audioTrack?.play()
-                Log.i("CyberAudioEngine", "AudioTrack initialized (Low-Latency mode) & PLAYING")
+                Log.i("CyberAudioEngine", "AudioTrack initialized & PLAYING")
             } else {
                 Log.e("CyberAudioEngine", "AudioTrack failed to initialize in both builder and legacy fallback")
             }
@@ -415,24 +411,37 @@ class CyberAudioEngine(private val context: Context) {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
             when (routing) {
                 AudioRouting.AUTO -> {
-                    // MODE_NORMAL guarantees pristine Hi-Fi 48kHz audio and prevents telephony AGC & Voice Focus
+                    // MODE_NORMAL guarantees pristine Hi-Fi audio through Bluetooth headphones or phone speaker
                     audioManager.mode = AudioManager.MODE_NORMAL
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         audioManager.clearCommunicationDevice()
                     }
                     @Suppress("DEPRECATION")
                     audioManager.isSpeakerphoneOn = false
-                    Log.i("CyberAudioEngine", "[AUTO] Routed to MODE_NORMAL (Hi-Fi media playback, AGC disabled)")
+                    Log.i("CyberAudioEngine", "[AUTO] Routed to MODE_NORMAL (Hi-Fi media playback)")
                 }
 
                 AudioRouting.SPEAKERPHONE -> {
-                    audioManager.mode = AudioManager.MODE_NORMAL
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        audioManager.clearCommunicationDevice()
+                        val commDevices = audioManager.availableCommunicationDevices
+                        val speaker = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                        if (speaker != null && _isHeadphoneConnected.value) {
+                            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                            audioManager.setCommunicationDevice(speaker)
+                            Log.i("CyberAudioEngine", "Force routed to BUILTIN_SPEAKER over headphones")
+                        } else {
+                            audioManager.mode = AudioManager.MODE_NORMAL
+                            audioManager.clearCommunicationDevice()
+                            @Suppress("DEPRECATION")
+                            audioManager.isSpeakerphoneOn = true
+                            Log.i("CyberAudioEngine", "Routed to SPEAKERPHONE (MODE_NORMAL)")
+                        }
+                    } else {
+                        audioManager.mode = AudioManager.MODE_NORMAL
+                        @Suppress("DEPRECATION")
+                        audioManager.isSpeakerphoneOn = true
+                        Log.i("CyberAudioEngine", "Routed to SPEAKERPHONE (MODE_NORMAL)")
                     }
-                    @Suppress("DEPRECATION")
-                    audioManager.isSpeakerphoneOn = true
-                    Log.i("CyberAudioEngine", "Routed to SPEAKERPHONE (MODE_NORMAL)")
                 }
 
                 AudioRouting.EARPIECE -> {
@@ -468,36 +477,22 @@ class CyberAudioEngine(private val context: Context) {
                 initSpeakerPlayback(currentRouting, 1.0f)
             }
 
-            var isPrebuffering = true
-
             while (isSpeakerWorkerRunning) {
                 try {
                     val track = audioTrack
                     if (track == null || track.state != AudioTrack.STATE_INITIALIZED) {
-                        Thread.sleep(10)
+                        Thread.sleep(15)
                         continue
                     }
 
-                    // Adaptive Pre-buffer Cushion:
-                    // Wait for 3 chunks (~60ms) before starting or resuming playback after a dropout.
-                    // This 60ms cushion completely absorbs Wi-Fi jitter so the physical speaker never starves!
-                    if (isPrebuffering) {
-                        if (speakerQueue.size < 3) {
-                            Thread.sleep(5)
-                            continue
-                        }
-                        isPrebuffering = false
-                        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                    if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                        try {
                             track.play()
-                        }
+                        } catch (_: Exception) {}
                     }
 
-                    val chunk = speakerQueue.poll(30, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    if (chunk == null) {
-                        // Wi-Fi network stalled and emptied the queue: re-engage prebuffering
-                        isPrebuffering = true
-                        continue
-                    }
+                    // Blocking poll for next PCM chunk from network
+                    val chunk = speakerQueue.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS) ?: continue
 
                     var totalWritten = 0
                     while (totalWritten < chunk.size && isSpeakerWorkerRunning) {
@@ -532,8 +527,8 @@ class CyberAudioEngine(private val context: Context) {
             val chunk = data.copyOfRange(offset, offset + length)
 
             // Anti-lag drift control:
-            // If queue accumulates > 10 chunks (~200ms lag), drop oldest chunk so playback stays real-time
-            while (speakerQueue.size > 10) {
+            // If queue accumulates > 15 chunks (~300ms lag), drop oldest chunk so playback stays real-time
+            while (speakerQueue.size > 15) {
                 speakerQueue.poll()
             }
 
