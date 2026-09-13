@@ -237,6 +237,14 @@ class CyberAudioEngine(private val context: Context) {
                         _micDbLevel.value = db
 
                         val bytesToWrite = readShorts * 2
+
+                        // Intelligent noise gate / squelch:
+                        // If sound is below conversational threshold (RMS < 90.0 ~= -51dBFS),
+                        // zero out buffer so ambient hiss and room noise never loop or swell during pauses.
+                        if (!isMuted && rms < 90.0) {
+                            byteBuffer.fill(0, 0, bytesToWrite)
+                        }
+
                         onPcmChunk?.invoke(byteBuffer, bytesToWrite)
 
                         // Forward to decoupled broadcast channel
@@ -296,13 +304,13 @@ class CyberAudioEngine(private val context: Context) {
             audioTrack?.release()
             audioTrack = null
 
-            // Minimal buffer size for lowest latency (2048 bytes = ~21.3ms at 48kHz 16-bit mono)
+            // Jitter-tolerant buffer size to eliminate DAC starvation and clicks (~85ms at 48kHz 16-bit mono)
             val minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
-            val bufferSize = minBufSize.coerceAtLeast(2048)
+            val bufferSize = (minBufSize * 3).coerceAtLeast(8192)
 
             applyAudioRouting(routing)
 
-            // Ensure Android volume is audible across both STREAM_MUSIC and STREAM_VOICE_CALL
+            // Ensure Android volume is audible across STREAM_MUSIC
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (audioManager != null) {
                 try {
@@ -310,13 +318,6 @@ class CyberAudioEngine(private val context: Context) {
                     val curMusic = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     if (curMusic < maxMusic / 2) {
                         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (maxMusic * 0.9f).toInt().coerceAtLeast(1), 0)
-                    }
-                } catch (_: Exception) {}
-                try {
-                    val maxCall = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-                    val curCall = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
-                    if (curCall < maxCall / 2) {
-                        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (maxCall * 0.9f).toInt().coerceAtLeast(1), 0)
                     }
                 } catch (_: Exception) {}
             }
@@ -359,13 +360,6 @@ class CyberAudioEngine(private val context: Context) {
                 }
 
                 track = trackBuilder.build()
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && track.state == AudioTrack.STATE_INITIALIZED) {
-                    try {
-                        val minFrames = minBufSize / 2
-                        track.setBufferSizeInFrames(minFrames)
-                    } catch (_: Exception) {}
-                }
             } catch (e: Exception) {
                 Log.w("CyberAudioEngine", "AudioTrack.Builder failed, using legacy constructor", e)
             }
@@ -416,70 +410,24 @@ class CyberAudioEngine(private val context: Context) {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
             when (routing) {
                 AudioRouting.AUTO -> {
+                    // MODE_NORMAL guarantees pristine Hi-Fi 48kHz audio and prevents telephony AGC & Voice Focus
+                    audioManager.mode = AudioManager.MODE_NORMAL
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val commDevices = audioManager.availableCommunicationDevices
-                        val targetHeadphone = commDevices.firstOrNull {
-                            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                            it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                            it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                        }
-                        if (targetHeadphone != null) {
-                            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                            audioManager.setCommunicationDevice(targetHeadphone)
-                            @Suppress("DEPRECATION")
-                            audioManager.isSpeakerphoneOn = false
-                            val devName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) targetHeadphone.productName else "Headphone"
-                            Log.i("CyberAudioEngine", "[AUTO] Routed to connected headphone: $devName")
-                        } else {
-                            val speaker = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                            if (speaker != null) {
-                                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                                audioManager.setCommunicationDevice(speaker)
-                            } else {
-                                audioManager.clearCommunicationDevice()
-                            }
-                            @Suppress("DEPRECATION")
-                            audioManager.isSpeakerphoneOn = true
-                            Log.i("CyberAudioEngine", "[AUTO] No headphones found, routed to TYPE_BUILTIN_SPEAKER")
-                        }
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                        val hasHeadphone = outputs.any {
-                            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                            it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-                        }
-                        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                        @Suppress("DEPRECATION")
-                        audioManager.isSpeakerphoneOn = !hasHeadphone
-                    } else {
-                        @Suppress("DEPRECATION")
-                        val hasHeadphone = audioManager.isWiredHeadsetOn || audioManager.isBluetoothA2dpOn
-                        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                        @Suppress("DEPRECATION")
-                        audioManager.isSpeakerphoneOn = !hasHeadphone
+                        audioManager.clearCommunicationDevice()
                     }
+                    @Suppress("DEPRECATION")
+                    audioManager.isSpeakerphoneOn = false
+                    Log.i("CyberAudioEngine", "[AUTO] Routed to MODE_NORMAL (Hi-Fi media playback, AGC disabled)")
                 }
 
                 AudioRouting.SPEAKERPHONE -> {
-                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    audioManager.mode = AudioManager.MODE_NORMAL
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val commDevices = audioManager.availableCommunicationDevices
-                        val speaker = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                        if (speaker != null) {
-                            audioManager.setCommunicationDevice(speaker)
-                        } else {
-                            audioManager.clearCommunicationDevice()
-                        }
+                        audioManager.clearCommunicationDevice()
                     }
                     @Suppress("DEPRECATION")
                     audioManager.isSpeakerphoneOn = true
-                    Log.i("CyberAudioEngine", "Force routed to SPEAKERPHONE")
+                    Log.i("CyberAudioEngine", "Routed to SPEAKERPHONE (MODE_NORMAL)")
                 }
 
                 AudioRouting.EARPIECE -> {
@@ -496,7 +444,7 @@ class CyberAudioEngine(private val context: Context) {
                         @Suppress("DEPRECATION")
                         audioManager.isSpeakerphoneOn = false
                     }
-                    Log.i("CyberAudioEngine", "Force routed to EARPIECE")
+                    Log.i("CyberAudioEngine", "Force routed to EARPIECE (MODE_IN_COMMUNICATION)")
                 }
             }
         } catch (e: Exception) {
@@ -506,19 +454,30 @@ class CyberAudioEngine(private val context: Context) {
 
     fun playSpeakerPcmChunk(data: ByteArray, offset: Int, length: Int) {
         try {
-            if (audioTrack == null || audioTrack?.state != AudioTrack.STATE_INITIALIZED) {
+            val track = audioTrack ?: run {
                 initSpeakerPlayback(currentRouting, 1.0f)
+                audioTrack
+            } ?: return
+
+            if (track.state != AudioTrack.STATE_INITIALIZED) return
+
+            if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                track.play()
             }
-            if (audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                audioTrack?.play()
-            }
-            val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioTrack?.write(data, offset, length, AudioTrack.WRITE_NON_BLOCKING) ?: 0
-            } else {
-                audioTrack?.write(data, offset, length) ?: 0
-            }
-            if (written < 0) {
-                Log.w("CyberAudioEngine", "AudioTrack.write error code: $written")
+
+            var totalWritten = 0
+            while (totalWritten < length) {
+                val toWrite = length - totalWritten
+                val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    track.write(data, offset + totalWritten, toWrite, AudioTrack.WRITE_BLOCKING)
+                } else {
+                    track.write(data, offset + totalWritten, toWrite)
+                }
+                if (written <= 0) {
+                    Log.w("CyberAudioEngine", "AudioTrack write stalled or error: $written")
+                    break
+                }
+                totalWritten += written
             }
         } catch (e: Exception) {
             Log.w("CyberAudioEngine", "Error writing to AudioTrack", e)

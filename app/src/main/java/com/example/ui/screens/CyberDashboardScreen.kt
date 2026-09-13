@@ -48,15 +48,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
 import com.example.ui.components.CyberControlDock
 import com.example.ui.components.CyberTelemetryBar
 import com.example.ui.components.CyberViewfinder
-import com.example.ui.theme.CyberBlack
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberSurface
-import com.example.ui.theme.CyberTextPrimary
-import com.example.ui.theme.CyberTextSecondary
+import com.example.ui.theme.*
 import com.example.viewmodel.CyberCaptureViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -127,25 +123,26 @@ fun CyberDashboardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "DASMO CYBER CAPTURE",
-                            fontFamily = FontFamily.Monospace,
+                            text = "DASMO Studio Capture",
+                            fontFamily = FontFamily.Default,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = CyberCyan
+                            fontSize = 20.sp,
+                            color = StudioTextPrimary
                         )
                         Text(
-                            text = "To stream your camera & microphone wirelessly over Wi-Fi to your PC, grant Camera and Microphone access.",
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = CyberTextSecondary
+                            text = "To stream high-definition video and audio wirelessly over Wi-Fi to your PC companion, camera and microphone permissions are required.",
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Default,
+                            color = StudioTextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Button(
                             onClick = { permissionsState.launchMultiplePermissionRequest() },
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack),
+                            colors = ButtonDefaults.buttonColors(containerColor = StudioPrimary, contentColor = Color.White),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("btn_grant_permissions")
+                            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("btn_grant_permissions")
                         ) {
-                            Text("Grant Hardware Access", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Text("Grant Hardware Access", fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                         }
                     }
                 }
@@ -154,63 +151,11 @@ fun CyberDashboardScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Top Telemetry Strip
+                    // Top Telemetry Strip (Integrated with AirLink & Audio Device Status)
                     CyberTelemetryBar(
                         stats = stats,
                         config = config
                     )
-
-                    // Live AirLink Connection Status Banner
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (stats.connectedClients > 0) CyberGreen.copy(alpha = 0.14f) else CyberSurface,
-                        border = BorderStroke(1.dp, if (stats.connectedClients > 0) CyberGreen.copy(alpha = 0.8f) else CyberCyan.copy(alpha = 0.3f)),
-                        modifier = Modifier.fillMaxWidth().testTag("banner_airlink_status")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (stats.connectedClients > 0) CyberGreen else CyberCyan)
-                                )
-                                Text(
-                                    text = if (stats.connectedClients > 0) "AIR LINK ACTIVE · CONNECTED TO PC" else "AIR LINK READY · OPEN PC SOFTWARE",
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (stats.connectedClients > 0) CyberGreen else CyberTextPrimary
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    text = stats.audioOutputDevice,
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (stats.hasHeadphones) CyberGreen else CyberCyan
-                                )
-                                Text(
-                                    text = if (stats.connectedClients > 0) "${stats.connectedClients} CLIENT" else "${stats.serverIp}:${stats.serverPort}",
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CyberCyan
-                                )
-                            }
-                        }
-                    }
 
                     // In-App OTA Update Prompt Banner
                     AnimatedVisibility(
@@ -221,8 +166,8 @@ fun CyberDashboardScreen(
                         Surface(
                             onClick = { showUpdateModal = true },
                             shape = RoundedCornerShape(12.dp),
-                            color = CyberGreen.copy(alpha = 0.15f),
-                            border = BorderStroke(1.dp, CyberGreen.copy(alpha = 0.7f)),
+                            color = StudioPrimaryDim,
+                            border = BorderStroke(1.dp, StudioPrimary.copy(alpha = 0.5f)),
                             modifier = Modifier.fillMaxWidth().testTag("banner_update_available")
                         ) {
                             Row(
@@ -237,29 +182,29 @@ fun CyberDashboardScreen(
                                     Icon(
                                         imageVector = Icons.Default.SystemUpdate,
                                         contentDescription = null,
-                                        tint = CyberGreen,
+                                        tint = StudioPrimary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "NEW UPDATE v${updateInfo.latestVersion} AVAILABLE",
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        color = CyberGreen
+                                        text = "Update Available · v${updateInfo.latestVersion}",
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Default,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = StudioTextPrimary
                                     )
                                 }
                                 Text(
-                                    text = "TAP TO UPDATE →",
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CyberCyan
+                                    text = "Update →",
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Default,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = StudioPrimary
                                 )
                             }
                         }
                     }
 
-                    // Main Viewfinder
+                    // Main Viewfinder - Expands to fill available vertical space
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -268,7 +213,8 @@ fun CyberDashboardScreen(
                         CyberViewfinder(
                             viewModel = viewModel,
                             config = config,
-                            stats = stats
+                            stats = stats,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 

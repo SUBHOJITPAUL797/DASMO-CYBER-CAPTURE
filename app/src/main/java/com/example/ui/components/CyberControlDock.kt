@@ -31,8 +31,9 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -53,15 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CyberConfig
-import com.example.ui.theme.CyberBlack
-import com.example.ui.theme.CyberBorder
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberRed
-import com.example.ui.theme.CyberSurface
-import com.example.ui.theme.CyberSurfaceVariant
-import com.example.ui.theme.CyberTextPrimary
-import com.example.ui.theme.CyberTextSecondary
+import com.example.ui.theme.*
+
 
 @Composable
 fun CyberControlDock(
@@ -80,7 +74,7 @@ fun CyberControlDock(
     modifier: Modifier = Modifier
 ) {
     val startButtonBg by animateColorAsState(
-        targetValue = if (isStreaming) CyberRed else CyberCyan,
+        targetValue = if (isStreaming) StudioDanger else StudioPrimary,
         animationSpec = tween(300),
         label = "btn_bg"
     )
@@ -88,12 +82,12 @@ fun CyberControlDock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(CyberSurface)
-            .border(1.dp, CyberBorder, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(StudioSurface)
+            .border(1.dp, StudioBorder, RoundedCornerShape(20.dp))
             .padding(14.dp)
             .testTag("cyber_control_dock"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Quick Action Icon Row (Simultaneous Call Controls)
@@ -106,8 +100,8 @@ fun CyberControlDock(
                 icon = if (config.isVideoPaused) Icons.Default.Pause else Icons.Default.Videocam,
                 label = if (config.isVideoPaused) "Paused" else "Video",
                 isActive = config.isVideoPaused,
-                activeColor = CyberRed,
-                inactiveColor = CyberCyan,
+                activeColor = StudioDanger,
+                inactiveColor = StudioTextSecondary,
                 testTag = "btn_pause_video",
                 onClick = onTogglePauseVideoClick
             )
@@ -116,16 +110,18 @@ fun CyberControlDock(
                 icon = if (config.isMicMuted) Icons.Default.MicOff else Icons.Default.Mic,
                 label = if (config.isMicMuted) "Muted" else "Mic On",
                 isActive = !config.isMicMuted,
-                activeColor = CyberGreen,
-                inactiveColor = CyberRed,
+                activeColor = StudioSuccess,
+                inactiveColor = StudioDanger,
                 testTag = "btn_toggle_mic",
                 onClick = onToggleMicClick
             )
 
             CyberDockIconButton(
-                icon = if (config.isSpeakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
-                label = if (config.isSpeakerEnabled) "Spk On" else "Spk Off",
+                icon = if (config.isSpeakerEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                label = if (config.isSpeakerEnabled) "Speaker" else "Spk Off",
                 isActive = config.isSpeakerEnabled,
+                activeColor = StudioPrimary,
+                inactiveColor = StudioTextSecondary,
                 testTag = "btn_toggle_speaker",
                 onClick = onToggleSpeakerClick
             )
@@ -141,6 +137,7 @@ fun CyberControlDock(
                 icon = if (config.isTorchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
                 label = "Torch",
                 isActive = config.isTorchOn,
+                activeColor = StudioWarning,
                 testTag = "btn_toggle_torch",
                 onClick = onToggleTorchClick
             )
@@ -161,7 +158,7 @@ fun CyberControlDock(
 
             CyberDockIconButton(
                 icon = Icons.Default.Settings,
-                label = "Config",
+                label = "Settings",
                 testTag = "btn_open_settings",
                 onClick = onOpenSettingsClick
             )
@@ -172,17 +169,17 @@ fun CyberControlDock(
             onClick = onStartStopClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
+                .height(48.dp)
                 .shadow(
-                    elevation = if (isStreaming) 12.dp else 6.dp,
-                    shape = RoundedCornerShape(14.dp),
-                    spotColor = startButtonBg
+                    elevation = if (isStreaming) 8.dp else 4.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = startButtonBg.copy(alpha = 0.5f)
                 )
                 .testTag("btn_master_start_stop"),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = startButtonBg,
-                contentColor = if (isStreaming) Color.White else CyberBlack
+                contentColor = Color.White
             )
         ) {
             Row(
@@ -191,16 +188,16 @@ fun CyberControlDock(
             ) {
                 Icon(
                     imageVector = if (isStreaming) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (isStreaming) "Stop Air Link Stream" else "Start Air Link Stream",
-                    modifier = Modifier.size(24.dp)
+                    contentDescription = if (isStreaming) "Stop Streaming" else "Start Camera Stream",
+                    modifier = Modifier.size(20.dp)
                 )
 
                 Text(
-                    text = if (isStreaming) "TERMINATE AIR LINK STREAM" else "INITIALIZE AIR LINK CAPTURE",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    letterSpacing = 1.sp
+                    text = if (isStreaming) "Stop Streaming" else "Start Camera Stream",
+                    fontFamily = FontFamily.Default,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    letterSpacing = 0.3.sp
                 )
             }
         }
@@ -212,28 +209,28 @@ fun CyberDockIconButton(
     icon: ImageVector,
     label: String,
     isActive: Boolean = false,
-    activeColor: Color = CyberCyan,
-    inactiveColor: Color = CyberTextSecondary,
+    activeColor: Color = StudioPrimary,
+    inactiveColor: Color = StudioTextSecondary,
     testTag: String,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .padding(horizontal = 3.dp, vertical = 2.dp)
             .testTag(testTag)
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .clip(CircleShape)
-                .background(if (isActive) activeColor.copy(alpha = 0.15f) else CyberSurfaceVariant)
+                .background(if (isActive) activeColor.copy(alpha = 0.16f) else StudioSurfaceElevated)
                 .border(
                     1.dp,
-                    if (isActive) activeColor else CyberBorder,
+                    if (isActive) activeColor.copy(alpha = 0.7f) else StudioBorderSubtle,
                     CircleShape
                 ),
             contentAlignment = Alignment.Center
@@ -249,8 +246,9 @@ fun CyberDockIconButton(
         Text(
             text = label,
             fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            color = if (isActive) activeColor else CyberTextSecondary
+            fontFamily = FontFamily.Default,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isActive) activeColor else StudioTextSecondary
         )
     }
 }

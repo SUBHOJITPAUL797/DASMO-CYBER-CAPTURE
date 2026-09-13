@@ -46,17 +46,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Dialog
-import com.example.ui.theme.CyberBlack
-import com.example.ui.theme.CyberBorder
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberRed
-import com.example.ui.theme.CyberSurface
-import com.example.ui.theme.CyberSurfaceVariant
-import com.example.ui.theme.CyberTextMuted
-import com.example.ui.theme.CyberTextPrimary
-import com.example.ui.theme.CyberTextSecondary
+import com.example.ui.theme.*
+
 import com.example.updater.AppUpdateInfo
 import com.example.updater.CyberUpdateManager
 import com.example.updater.UpdateDownloadState
@@ -81,11 +74,11 @@ fun CyberUpdateModal(
         }
     }) {
         Card(
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = CyberSurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, CyberCyan, RoundedCornerShape(20.dp))
+                .border(1.dp, CyberBorder, RoundedCornerShape(16.dp))
                 .testTag("cyber_update_modal")
         ) {
             Column(
@@ -108,14 +101,13 @@ fun CyberUpdateModal(
                             imageVector = Icons.Default.SystemUpdate,
                             contentDescription = null,
                             tint = CyberCyan,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            text = "CYBER UPDATE // OTA",
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = CyberCyan
+                            text = "Software Update",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            color = CyberTextPrimary
                         )
                     }
 
@@ -145,16 +137,14 @@ fun CyberUpdateModal(
                 ) {
                     Column {
                         Text(
-                            text = "CURRENT: v${updateInfo.currentVersion}",
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
+                            text = "Current: v${updateInfo.currentVersion}",
+                            fontSize = 11.sp,
                             color = CyberTextMuted
                         )
                         Text(
-                            text = "LATEST: v${updateInfo.latestVersion}",
+                            text = "Latest: v${updateInfo.latestVersion}",
                             fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = CyberGreen
                         )
                     }
@@ -162,14 +152,13 @@ fun CyberUpdateModal(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.2f) else CyberCyan.copy(alpha = 0.2f))
+                            .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.15f) else CyberCyan.copy(alpha = 0.12f))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (updateInfo.isUpdateAvailable) "OTA UPDATE READY" else "CURRENT / INSTALLED",
-                            fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
+                            text = if (updateInfo.isUpdateAvailable) "UPDATE READY" else "UP TO DATE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberCyan
                         )
                     }
@@ -179,27 +168,25 @@ fun CyberUpdateModal(
                 Text(
                     text = updateInfo.releaseTitle.ifEmpty { "DASMO CYBER CAPTURE Update" },
                     fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = CyberTextPrimary
                 )
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
+                        .height(105.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(CyberBlack.copy(alpha = 0.6f))
                         .border(1.dp, CyberBorder, RoundedCornerShape(8.dp))
-                        .padding(10.dp)
+                        .padding(12.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
                         text = updateInfo.releaseNotes.ifEmpty { "• Ultra-low latency camera pipeline\n• In-app OTA downloader & installer\n• Bug fixes and stability enhancements" },
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
                         color = CyberTextSecondary,
-                        lineHeight = 16.sp
+                        lineHeight = 18.sp
                     )
                 }
 
@@ -220,17 +207,16 @@ fun CyberUpdateModal(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "DOWNLOADING UPDATE...",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = CyberCyan
+                                    text = "Downloading update...",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp,
+                                    color = CyberTextPrimary
                                 )
                                 Text(
                                     text = "${downloadState.progressPercent}%",
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     color = CyberCyan
                                 )
                             }
@@ -239,8 +225,8 @@ fun CyberUpdateModal(
                                 progress = { (downloadState.progressPercent / 100f).coerceIn(0f, 1f) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
                                 color = CyberCyan,
                                 trackColor = CyberBlack
                             )
@@ -259,13 +245,12 @@ fun CyberUpdateModal(
                                 Text(
                                     text = "$downloadedMb MB / $totalMb",
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     color = CyberTextSecondary
                                 )
                                 Text(
-                                    text = "Direct In-App Stream",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
+                                    text = "Direct OTA Stream",
+                                    fontSize = 11.sp,
                                     color = CyberTextMuted
                                 )
                             }
@@ -274,7 +259,7 @@ fun CyberUpdateModal(
                                 onClick = onCancelDownload,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
-                                Text("Cancel Download", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyberRed)
+                                Text("Cancel Download", fontSize = 12.sp, color = CyberRed)
                             }
                         }
                     }
@@ -285,9 +270,9 @@ fun CyberUpdateModal(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(CyberGreen.copy(alpha = 0.12f))
-                                .border(1.dp, CyberGreen.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .border(1.dp, CyberGreen.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -300,10 +285,9 @@ fun CyberUpdateModal(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "UPDATE DOWNLOADED & READY!",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
+                                    text = "Update downloaded & ready to install",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
                                     color = CyberGreen
                                 )
                             }
@@ -314,14 +298,14 @@ fun CyberUpdateModal(
                                     containerColor = CyberGreen,
                                     contentColor = CyberBlack
                                 ),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("btn_install_downloaded_apk")
                             ) {
                                 Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.size(8.dp))
-                                Text("INSTALL UPDATE NOW", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Install Update Now", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             }
 
                             if (!CyberUpdateManager.canRequestPackageInstalls(context)) {
@@ -332,7 +316,7 @@ fun CyberUpdateModal(
                                 ) {
                                     Icon(Icons.Default.Settings, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.size(6.dp))
-                                    Text("Enable 'Install Unknown Apps' Permission", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = CyberCyan)
+                                    Text("Enable 'Install Unknown Apps' Permission", fontSize = 11.sp, color = CyberCyan)
                                 }
                             }
                         }
@@ -345,17 +329,17 @@ fun CyberUpdateModal(
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(CyberRed.copy(alpha = 0.12f))
                                 .border(1.dp, CyberRed.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                                .padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = CyberRed, modifier = Modifier.size(16.dp))
-                                Text("In-App Download Error", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyberRed, fontWeight = FontWeight.Bold)
+                                Text("Download Failed", fontSize = 12.sp, color = CyberRed, fontWeight = FontWeight.SemiBold)
                             }
-                            Text(downloadState.message, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = CyberTextSecondary)
+                            Text(downloadState.message, fontSize = 11.sp, color = CyberTextSecondary)
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -366,12 +350,12 @@ fun CyberUpdateModal(
                                         val url = updateInfo.apkDownloadUrl.ifEmpty { updateInfo.releaseUrl }
                                         onStartDownload(url)
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack),
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = Color.White),
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.size(4.dp))
-                                    Text("Retry", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    Text("Retry", fontSize = 12.sp)
                                 }
 
                                 OutlinedButton(
@@ -383,7 +367,7 @@ fun CyberUpdateModal(
                                 ) {
                                     Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.size(4.dp))
-                                    Text("Browser", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyberCyan)
+                                    Text("Browser", fontSize = 12.sp, color = CyberCyan)
                                 }
                             }
                         }
@@ -404,18 +388,17 @@ fun CyberUpdateModal(
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = CyberCyan,
-                                    contentColor = CyberBlack
+                                    contentColor = Color.White
                                 ),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth().testTag("btn_download_apk_update")
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.size(8.dp))
                                 Text(
-                                    text = if (updateInfo.isUpdateAvailable) "DOWNLOAD & UPDATE IN-APP" else "RE-INSTALL / UPDATE IN-APP",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
+                                    text = if (updateInfo.isUpdateAvailable) "Download & Install Update" else "Re-install Update",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp
                                 )
                             }
 
@@ -426,12 +409,12 @@ fun CyberUpdateModal(
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = CyberSurfaceVariant,
-                                        contentColor = CyberCyan
+                                        contentColor = CyberTextPrimary
                                     ),
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("btn_download_msi_update")
                                 ) {
-                                    Text("Download Windows MSI Installer", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    Text("Download Windows MSI Installer", fontSize = 12.sp)
                                 }
                             }
 
@@ -439,7 +422,7 @@ fun CyberUpdateModal(
                                 onClick = onDismiss,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
-                                Text("Remind Me Later", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyberTextMuted)
+                                Text("Remind Me Later", fontSize = 12.sp, color = CyberTextMuted)
                             }
                         }
                     }

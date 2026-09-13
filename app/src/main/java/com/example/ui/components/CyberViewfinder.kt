@@ -35,11 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.model.CyberConfig
 import com.example.model.CyberStreamStats
-import com.example.ui.theme.CyberBlack
-import com.example.ui.theme.CyberBorder
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberTextSecondary
+import com.example.ui.theme.*
 import com.example.viewmodel.CyberCaptureViewModel
 
 @Composable
@@ -62,8 +58,8 @@ fun CyberViewfinder(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(16.dp))
-            .background(CyberBlack)
-            .border(2.dp, if (stats.isStreaming) CyberCyan else CyberBorder, RoundedCornerShape(16.dp))
+            .background(Color(0xFF070B12))
+            .border(1.5.dp, if (stats.isStreaming) StudioPrimary else StudioBorderSubtle, RoundedCornerShape(16.dp))
             .testTag("cyber_viewfinder_container")
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->
@@ -88,7 +84,7 @@ fun CyberViewfinder(
 
             if (config.showGrid) {
                 // Rule of Thirds Grid
-                val gridColor = Color(0x3300E5FF)
+                val gridColor = StudioPrimary.copy(alpha = 0.2f)
                 drawLine(gridColor, Offset(w / 3f, 0f), Offset(w / 3f, h), strokeWidth = 1.dp.toPx())
                 drawLine(gridColor, Offset(2 * w / 3f, 0f), Offset(2 * w / 3f, h), strokeWidth = 1.dp.toPx())
                 drawLine(gridColor, Offset(0f, h / 3f), Offset(w, h / 3f), strokeWidth = 1.dp.toPx())
@@ -99,7 +95,7 @@ fun CyberViewfinder(
                 val cx = w / 2f
                 val cy = h / 2f
                 val reticleRadius = 45.dp.toPx()
-                val reticleColor = if (stats.isStreaming) CyberCyan else Color(0x8800E5FF)
+                val reticleColor = if (stats.isStreaming) StudioPrimary else StudioPrimary.copy(alpha = 0.5f)
 
                 // Center Reticle
                 drawCircle(
@@ -121,7 +117,7 @@ fun CyberViewfinder(
                 // Corner Brackets
                 val pad = 16.dp.toPx()
                 val bracketLen = 24.dp.toPx()
-                val bracketColor = if (stats.isStreaming) CyberCyan else Color(0x6600E5FF)
+                val bracketColor = if (stats.isStreaming) StudioPrimary else StudioPrimary.copy(alpha = 0.4f)
 
                 // Top-Left
                 drawLine(bracketColor, Offset(pad, pad), Offset(pad + bracketLen, pad), strokeWidth = 2.dp.toPx())
@@ -134,7 +130,7 @@ fun CyberViewfinder(
                 drawLine(bracketColor, Offset(pad, h - pad), Offset(pad, h - pad - bracketLen), strokeWidth = 2.dp.toPx())
                 // Bottom-Right
                 drawLine(bracketColor, Offset(w - pad, h - pad), Offset(w - pad - bracketLen, h - pad), strokeWidth = 2.dp.toPx())
-                drawLine(bracketColor, Offset(w - pad, h - pad), Offset(w - pad, h - pad - bracketLen), strokeWidth = 2.dp.toPx())
+                drawLine(bracketColor, Offset(w - pad, h - pad), Offset(w - pad, pad + bracketLen), strokeWidth = 2.dp.toPx())
             }
         }
 
@@ -142,23 +138,23 @@ fun CyberViewfinder(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Text(
-                text = "DASMO // [${config.resolution.label}] ${if (config.activeFilter != com.example.model.CyberFilter.NONE) "· ${config.activeFilter.displayName}" else ""}",
-                color = CyberCyan,
+                text = "DASMO STUDIO · [${config.resolution.label}] ${if (config.activeFilter != com.example.model.CyberFilter.NONE) "· ${config.activeFilter.displayName}" else ""}",
+                color = StudioPrimary,
                 fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.TopStart)
             )
 
             Text(
-                text = "ZOOM: ${String.format("%.1f", config.zoomFactor)}x",
-                color = CyberTextSecondary,
+                text = "ZOOM ${String.format("%.1f", config.zoomFactor)}x",
+                color = StudioTextSecondary,
                 fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
@@ -168,24 +164,24 @@ fun CyberViewfinder(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Text(
-                text = if (stats.isStreaming) "AIR LINK ACTIVE · ZERO USB" else "CAPTURE READY · TAP START",
-                color = if (stats.isStreaming) CyberGreen else CyberTextSecondary,
+                text = if (stats.isStreaming) "LIVE AIR LINK STREAMING" else "STUDIO READY · TAP START",
+                color = if (stats.isStreaming) StudioSuccess else StudioTextMuted,
                 fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.BottomStart)
             )
 
             if (stats.isStreaming) {
                 Text(
                     text = "${stats.fps} FPS · ${stats.bitrateKbps} kbps",
-                    color = CyberCyan,
+                    color = StudioPrimary,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.align(Alignment.BottomEnd)
                 )
             }

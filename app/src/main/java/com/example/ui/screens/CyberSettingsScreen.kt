@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
+
+
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
@@ -60,17 +62,8 @@ import androidx.compose.ui.unit.sp
 import com.example.model.CyberConfig
 import com.example.model.PairedDevice
 import com.example.model.StreamResolution
-import com.example.ui.theme.CyberBlack
-import com.example.ui.theme.CyberBorder
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.CyberDark
-import com.example.ui.theme.CyberGreen
-import com.example.ui.theme.CyberRed
-import com.example.ui.theme.CyberSurface
-import com.example.ui.theme.CyberSurfaceVariant
-import com.example.ui.theme.CyberTextMuted
-import com.example.ui.theme.CyberTextPrimary
-import com.example.ui.theme.CyberTextSecondary
+import com.example.ui.theme.*
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,19 +100,18 @@ fun CyberSettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "SETTINGS // CONFIGURATION",
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = CyberCyan
+                        text = "Settings",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 18.sp,
+                        color = CyberTextPrimary
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick, modifier = Modifier.testTag("btn_back_settings")) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = CyberCyan
+                            tint = CyberTextPrimary
                         )
                     }
                 },
@@ -137,16 +129,16 @@ fun CyberSettingsScreen(
         ) {
             // Section 1: Stream Resolution Presets
             item {
-                CyberSettingsCard(title = "VIDEO STREAM RESOLUTION", icon = Icons.Default.Videocam) {
+                CyberSettingsCard(title = "Video Stream Resolution", icon = Icons.Default.Videocam) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         StreamResolution.values().forEach { res ->
                             val isSelected = res == config.resolution
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) CyberCyan.copy(alpha = 0.15f) else CyberSurfaceVariant)
-                                    .border(1.dp, if (isSelected) CyberCyan else CyberBorder, RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) CyberCyan.copy(alpha = 0.12f) else CyberSurfaceVariant)
+                                    .border(1.dp, if (isSelected) CyberCyan else CyberBorder.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                                     .clickable { onResolutionChanged(res) }
                                     .padding(12.dp)
                                     .testTag("res_option_${res.name}"),
@@ -156,15 +148,14 @@ fun CyberSettingsScreen(
                                 Column {
                                     Text(
                                         text = res.label,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
                                         color = if (isSelected) CyberCyan else CyberTextPrimary
                                     )
                                     Text(
                                         text = "${res.width}x${res.height} · ${res.desc}",
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         color = CyberTextMuted
                                     )
                                 }
@@ -185,21 +176,26 @@ fun CyberSettingsScreen(
 
             // Section 2: Viewfinder HUD & Mirroring
             item {
-                CyberSettingsCard(title = "VIEWFINDER & HUD OPTIONS", icon = Icons.Default.Settings) {
+                CyberSettingsCard(title = "Viewfinder & Composition", icon = Icons.Default.Settings) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text("Rule of Thirds Grid", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = CyberTextPrimary)
-                                Text("Display alignment composition overlay", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = CyberTextMuted)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Rule of Thirds Grid", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = CyberTextPrimary)
+                                Text("Display composition alignment grid overlay", fontSize = 11.sp, color = CyberTextMuted)
                             }
                             Switch(
                                 checked = config.showGrid,
                                 onCheckedChange = { onToggleGrid() },
-                                colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan, checkedTrackColor = CyberCyan.copy(alpha = 0.4f)),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = CyberCyan,
+                                    uncheckedThumbColor = CyberTextMuted,
+                                    uncheckedTrackColor = CyberSurfaceVariant
+                                ),
                                 modifier = Modifier.testTag("switch_grid")
                             )
                         }
@@ -209,14 +205,19 @@ fun CyberSettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text("Mirror Front Camera", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = CyberTextPrimary)
-                                Text("Flip selfie feed horizontally for natural mirror look", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = CyberTextMuted)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Mirror Front Camera", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = CyberTextPrimary)
+                                Text("Flip front selfie feed horizontally for natural look", fontSize = 11.sp, color = CyberTextMuted)
                             }
                             Switch(
                                 checked = config.isMirrored,
                                 onCheckedChange = { onToggleMirror() },
-                                colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan, checkedTrackColor = CyberCyan.copy(alpha = 0.4f)),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = CyberCyan,
+                                    uncheckedThumbColor = CyberTextMuted,
+                                    uncheckedTrackColor = CyberSurfaceVariant
+                                ),
                                 modifier = Modifier.testTag("switch_mirror")
                             )
                         }
@@ -226,14 +227,13 @@ fun CyberSettingsScreen(
 
             // Section 3: Paired Desktop PCs (Wi-Fi Auto-Discovery)
             item {
-                CyberSettingsCard(title = "PAIRED DESKTOP PCs (WI-FI / LAN)", icon = Icons.Default.Computer) {
+                CyberSettingsCard(title = "Paired Desktop Workstations", icon = Icons.Default.Computer) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (pairedDevices.isEmpty()) {
                             Text(
                                 text = "No paired PCs saved. Broadcast on local network or add PC IP manually below.",
-                                fontSize = 11.sp,
-                                color = CyberTextMuted,
-                                fontFamily = FontFamily.Monospace
+                                fontSize = 12.sp,
+                                color = CyberTextMuted
                             )
                         } else {
                             pairedDevices.forEach { device ->
@@ -242,13 +242,13 @@ fun CyberSettingsScreen(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(CyberSurfaceVariant)
-                                        .padding(10.dp),
+                                        .padding(12.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column {
-                                        Text(device.name, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = CyberTextPrimary)
-                                        Text("${device.ipAddress}:${device.port} · ${device.connectionType}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = CyberTextSecondary)
+                                        Text(device.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = CyberTextPrimary)
+                                        Text("${device.ipAddress}:${device.port} · ${device.connectionType}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = CyberTextSecondary)
                                     }
 
                                     IconButton(onClick = { onRemoveDevice(device) }, modifier = Modifier.size(28.dp)) {
@@ -264,7 +264,7 @@ fun CyberSettingsScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CyberSurfaceVariant, contentColor = CyberCyan)
                         ) {
-                            Text("+ Add Desktop PC Manually", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            Text("+ Add Desktop PC Manually", fontWeight = FontWeight.Medium, fontSize = 13.sp)
                         }
                     }
                 }
@@ -272,20 +272,19 @@ fun CyberSettingsScreen(
 
             // Section 4: Zero USB Wireless Architecture Information
             item {
-                CyberSettingsCard(title = "NATIVE DESKTOP DRIVER & ZERO-USB SPEC", icon = Icons.Default.Info) {
+                CyberSettingsCard(title = "Desktop Driver & Audio Pipeline", icon = Icons.Default.Info) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("• Device Name in WhatsApp Desktop: \"DASMO CYBER CAPTURE\"", fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = CyberGreen)
-                        Text("• Microphones: \"DASMO Cyber Microphone\" (Direct PCM 48kHz)", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = CyberCyan)
-                        Text("• 1-Click Desktop Installer: Download directly from http://[PHONE_IP]:${config.serverPort}", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary)
-                        Text("• Protocol: HTTP Multipart MJPEG + Raw PCM Full-Duplex Audio", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
-                        Text("• Transmission: 100% On-The-Air Wi-Fi & LAN (Zero USB Cables Required)", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = CyberCyan)
+                        Text("• Device Name in WhatsApp Desktop: \"DASMO CYBER CAPTURE\"", fontSize = 12.sp, color = CyberGreen, fontWeight = FontWeight.Medium)
+                        Text("• Microphones: Direct PCM 48kHz Wireless Audio", fontSize = 12.sp, color = CyberCyan)
+                        Text("• Companion Server: http://[PHONE_IP]:${config.serverPort}", fontSize = 12.sp, color = CyberTextPrimary)
+                        Text("• Transmission: 100% On-The-Air Wi-Fi & LAN (Zero USB Cables Required)", fontSize = 11.sp, color = CyberTextSecondary)
                     }
                 }
             }
 
             // Section 5: In-App Updates & Releases
             item {
-                CyberSettingsCard(title = "CYBER OTA UPDATE & RELEASES", icon = Icons.Default.Settings) {
+                CyberSettingsCard(title = "Software Updates & Releases", icon = Icons.Default.Settings) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -293,16 +292,16 @@ fun CyberSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Current Version: v${updateInfo.currentVersion}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = CyberTextPrimary, fontWeight = FontWeight.Bold)
-                                Text(if (updateInfo.isUpdateAvailable) "Latest: v${updateInfo.latestVersion} (Update Available)" else "System is up to date", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberTextMuted)
+                                Text("Current Version: v${updateInfo.currentVersion}", fontSize = 13.sp, color = CyberTextPrimary, fontWeight = FontWeight.Medium)
+                                Text(if (updateInfo.isUpdateAvailable) "Latest: v${updateInfo.latestVersion} (Update Available)" else "System is up to date", fontSize = 11.sp, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberTextMuted)
                             }
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.2f) else CyberCyan.copy(alpha = 0.15f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (updateInfo.isUpdateAvailable) CyberGreen.copy(alpha = 0.15f) else CyberCyan.copy(alpha = 0.12f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text(if (updateInfo.isUpdateAvailable) "UPDATE" else "LATEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberCyan, fontWeight = FontWeight.Bold)
+                                Text(if (updateInfo.isUpdateAvailable) "UPDATE READY" else "UP TO DATE", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (updateInfo.isUpdateAvailable) CyberGreen else CyberCyan)
                             }
                         }
 
@@ -313,7 +312,7 @@ fun CyberSettingsScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberGreen, contentColor = CyberBlack)
                             ) {
-                                Text("🚀 View Update & Changelog (v${updateInfo.latestVersion})", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("View Update & Changelog (v${updateInfo.latestVersion})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             }
                         }
 
@@ -324,9 +323,9 @@ fun CyberSettingsScreen(
                             },
                             modifier = Modifier.fillMaxWidth().testTag("btn_check_updates_settings"),
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack)
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = Color.White)
                         ) {
-                            Text("🔄 Check for Updates Now", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Check for Updates Now", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
 
                         Button(
@@ -340,7 +339,7 @@ fun CyberSettingsScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CyberSurfaceVariant, contentColor = CyberTextPrimary)
                         ) {
-                            Text("🌐 View Releases on GitHub", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            Text("View Releases on GitHub", fontSize = 13.sp)
                         }
                     }
                 }
@@ -366,7 +365,7 @@ fun CyberSettingsScreen(
     if (showAddDeviceDialog) {
         AlertDialog(
             onDismissRequest = { showAddDeviceDialog = false },
-            title = { Text("Add Paired Desktop PC", fontFamily = FontFamily.Monospace, color = CyberCyan) },
+            title = { Text("Add Paired Desktop PC", fontWeight = FontWeight.SemiBold, color = CyberTextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -393,15 +392,15 @@ fun CyberSettingsScreen(
                             showAddDeviceDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = CyberBlack),
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan, contentColor = Color.White),
                     modifier = Modifier.testTag("btn_confirm_add_device")
                 ) {
-                    Text("Save Pair", fontFamily = FontFamily.Monospace)
+                    Text("Save Connection", fontWeight = FontWeight.Medium)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddDeviceDialog = false }) {
-                    Text("Cancel", fontFamily = FontFamily.Monospace, color = CyberTextSecondary)
+                    Text("Cancel", color = CyberTextSecondary)
                 }
             },
             containerColor = CyberSurface
@@ -416,11 +415,11 @@ fun CyberSettingsCard(
     content: @Composable () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = CyberSurface),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, CyberBorder, RoundedCornerShape(16.dp))
+            .border(1.dp, CyberBorder, RoundedCornerShape(12.dp))
     ) {
         Column(
             modifier = Modifier
@@ -435,10 +434,9 @@ fun CyberSettingsCard(
                 Icon(imageVector = icon, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(18.dp))
                 Text(
                     text = title,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = CyberCyan
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = CyberTextPrimary
                 )
             }
             content()

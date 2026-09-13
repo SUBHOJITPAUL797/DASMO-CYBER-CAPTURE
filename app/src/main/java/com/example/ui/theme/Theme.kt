@@ -6,26 +6,26 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val CyberColorScheme = darkColorScheme(
-    primary = CyberCyan,
-    onPrimary = CyberBlack,
-    primaryContainer = CyberBlue,
-    onPrimaryContainer = CyberTextPrimary,
-    secondary = CyberCyanDim,
-    onSecondary = CyberBlack,
-    secondaryContainer = CyberSurfaceVariant,
-    onSecondaryContainer = CyberCyan,
-    tertiary = CyberGreen,
-    onTertiary = CyberBlack,
-    error = CyberRed,
-    onError = CyberTextPrimary,
-    background = CyberBlack,
-    onBackground = CyberTextPrimary,
-    surface = CyberDark,
-    onSurface = CyberTextPrimary,
-    surfaceVariant = CyberSurface,
-    onSurfaceVariant = CyberTextSecondary,
-    outline = CyberBorder
+private val StudioColorScheme = darkColorScheme(
+    primary = StudioPrimary,
+    onPrimary = StudioTextPrimary,
+    primaryContainer = StudioPrimaryDim,
+    onPrimaryContainer = StudioPrimary,
+    secondary = StudioAccent,
+    onSecondary = StudioTextPrimary,
+    secondaryContainer = StudioSurfaceElevated,
+    onSecondaryContainer = StudioTextPrimary,
+    tertiary = StudioSuccess,
+    onTertiary = StudioTextPrimary,
+    error = StudioDanger,
+    onError = StudioTextPrimary,
+    background = StudioDarkBg,
+    onBackground = StudioTextPrimary,
+    surface = StudioDark,
+    onSurface = StudioTextPrimary,
+    surfaceVariant = StudioSurface,
+    onSurfaceVariant = StudioTextSecondary,
+    outline = StudioBorder
 )
 
 @Composable
@@ -35,7 +35,7 @@ fun MyApplicationTheme(
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = CyberColorScheme,
+        colorScheme = StudioColorScheme,
         typography = Typography,
         content = content
     )

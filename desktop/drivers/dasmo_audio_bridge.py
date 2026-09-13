@@ -54,7 +54,7 @@ else:
 
 SAMPLE_RATE = 48000
 CHANNELS = 1
-BLOCK_SIZE = 480  # 10.0ms chunk size at 48kHz for sub-20ms ultra-low latency
+BLOCK_SIZE = 960  # 20.0ms chunk size at 48kHz (WebRTC standard for jitter resilience & low latency)
 
 WS_MIC_URL = f"ws://{PHONE_IP}:{PORT}/ws/mic"
 WS_SPEAKER_URL = f"ws://{PHONE_IP}:{PORT}/ws/speaker"
@@ -140,7 +140,7 @@ class PcToPhoneSpeakerTransmitter:
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.audio_queue = queue.Queue(maxsize=3)  # Strictly bounded ~30ms max buffer
+        self.audio_queue = queue.Queue(maxsize=15)  # ~300ms buffer capacity for smooth jitter tolerance
         self.running = True
         self.current_device_name = "Detecting..."
         
@@ -184,13 +184,14 @@ class PcToPhoneSpeakerTransmitter:
                     except queue.Empty:
                         continue
 
-                    # ANTI-LAG ZERO-DELAY FLUSH:
-                    # If socket or network jitter buffered multiple chunks, skip directly to the freshest chunk!
-                    while self.audio_queue.qsize() > 0:
-                        try:
-                            chunk = self.audio_queue.get_nowait()
-                        except Exception:
-                            break
+                    # If network stalls severely (>10 chunks = >200ms lag), trim older backlog to regain sync,
+                    # but NEVER drop on normal jitter (<8 chunks) to keep audio smooth & crackle-free!
+                    if self.audio_queue.qsize() > 10:
+                        while self.audio_queue.qsize() > 3:
+                            try:
+                                self.audio_queue.get_nowait()
+                            except Exception:
+                                break
 
                     if is_ws:
                         send_ws_binary(sock, chunk)
@@ -230,11 +231,32 @@ class PcToPhoneSpeakerTransmitter:
         p = GLOBAL_PA
         loopback_dev = None
         try:
-            loopback_dev = p.get_default_wasapi_loopback()
+            cur_def = p.get_default_wasapi_loopback()
+            # CRITICAL: Prevent self-capture feedback loop!
+            # If default loopback is VB-Cable / Virtual Cable, DO NOT capture it,
+            # because PhoneMicToPcReceiver injects phone mic into VB-Cable!
+            if cur_def and not any(k in cur_def['name'].lower() for k in ['cable', 'virtual', 'vb-audio']):
+                loopback_dev = cur_def
+            elif cur_def:
+                print(f"[!] Notice: Default loopback is virtual '{cur_def['name']}'. Searching for physical speakers...", flush=True)
         except Exception:
             pass
 
         if not loopback_dev:
+            # First pass: find a physical loopback device (Speakers, Realtek, Headphones)
+            for i in range(p.get_device_count()):
+                try:
+                    dev = p.get_device_info_by_index(i)
+                    if dev.get('isLoopbackDevice'):
+                        name_lower = dev['name'].lower()
+                        if not any(k in name_lower for k in ['cable', 'virtual', 'vb-audio']):
+                            loopback_dev = dev
+                            break
+                except Exception:
+                    pass
+
+        if not loopback_dev:
+            # Fallback to any loopback device if no physical one found
             for i in range(p.get_device_count()):
                 try:
                     dev = p.get_device_info_by_index(i)
@@ -271,11 +293,11 @@ class PcToPhoneSpeakerTransmitter:
                     pcm_all = np.frombuffer(in_data, dtype=np.int16).reshape(-1, dev_channels)
                     mono_samples = pcm_all[:, 0].astype(np.int16)
 
-                # Dynamic resampling if hardware sample rate != 48000Hz
+                # Dynamic resampling if hardware sample rate != 48000Hz (endpoint=False ensures continuous block transitions)
                 if dev_rate != SAMPLE_RATE and len(mono_samples) > 0:
                     out_count = int(round(len(mono_samples) * SAMPLE_RATE / dev_rate))
                     mono_samples = np.interp(
-                        np.linspace(0, len(mono_samples) - 1, out_count),
+                        np.linspace(0, len(mono_samples), out_count, endpoint=False),
                         np.arange(len(mono_samples)),
                         mono_samples
                     ).astype(np.int16)
@@ -290,8 +312,8 @@ class PcToPhoneSpeakerTransmitter:
 
                 pcm_bytes = mono_samples.tobytes()
 
-                # Anti-lag queue drain: drop older chunks if queue depth exceeds 2
-                while self.audio_queue.qsize() >= 2:
+                # High capacity buffer: allow up to 12 chunks (~240ms) without dropping to absorb network hiccups
+                while self.audio_queue.qsize() >= 12:
                     try:
                         self.audio_queue.get_nowait()
                     except Exception:
@@ -324,8 +346,9 @@ class PcToPhoneSpeakerTransmitter:
                 try:
                     cur_def = p.get_default_wasapi_loopback()
                     if cur_def and cur_def['index'] != loopback_dev['index']:
-                        print(f"[*] Windows Sound Output changed to: '{cur_def['name']}'. Re-attaching capture...", flush=True)
-                        break
+                        if not any(k in cur_def['name'].lower() for k in ['cable', 'virtual', 'vb-audio']):
+                            print(f"[*] Windows Sound Output changed to: '{cur_def['name']}'. Re-attaching capture...", flush=True)
+                            break
                 except Exception:
                     pass
         finally:
@@ -338,7 +361,8 @@ class PcToPhoneSpeakerTransmitter:
     def _run_sounddevice_loop(self):
         loopback_dev = None
         for i, dev in enumerate(sd.query_devices()):
-            if dev['max_input_channels'] > 0 and 'loopback' in dev['name'].lower():
+            name = dev['name'].lower()
+            if dev['max_input_channels'] > 0 and 'loopback' in name and not any(k in name for k in ['cable', 'virtual', 'vb-audio']):
                 loopback_dev = i
                 break
 
@@ -346,7 +370,7 @@ class PcToPhoneSpeakerTransmitter:
             if not self.running:
                 return
             pcm_data = (np.clip(indata[:, 0], -1.0, 1.0) * 32767).astype(np.int16).tobytes()
-            while self.audio_queue.qsize() >= 2:
+            while self.audio_queue.qsize() >= 12:
                 try:
                     self.audio_queue.get_nowait()
                 except Exception:
