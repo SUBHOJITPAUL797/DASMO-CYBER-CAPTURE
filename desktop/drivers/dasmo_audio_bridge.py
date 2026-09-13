@@ -100,20 +100,21 @@ def send_ws_binary(sock, data):
     else:
         header = bytearray([0x82, 0x80 | 127]) + struct.pack("!Q", length)
     header.extend(mask)
-    masked_data = bytearray(length)
-    for i in range(length):
-        masked_data[i] = data[i] ^ mask[i % 4]
-    sock.sendall(header + masked_data)
+    mask_bytes = (mask * ((length // 4) + 1))[:length]
+    masked = np.bitwise_xor(np.frombuffer(data, dtype=np.uint8), np.frombuffer(mask_bytes, dtype=np.uint8)).tobytes()
+    sock.sendall(header + masked)
 
 
 def recv_exact(sock, n):
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
+    buf = bytearray(n)
+    view = memoryview(buf)
+    pos = 0
+    while pos < n:
+        chunk_len = sock.recv_into(view[pos:])
+        if not chunk_len:
             raise ConnectionError("Socket closed mid-frame")
-        buf += chunk
-    return buf
+        pos += chunk_len
+    return bytes(buf)
 
 
 def recv_ws_binary(sock):
@@ -126,13 +127,13 @@ def recv_ws_binary(sock):
     elif payload_len == 127:
         payload_len = struct.unpack("!Q", recv_exact(sock, 8))[0]
     mask_key = recv_exact(sock, 4) if masked else None
-    payload = bytearray(recv_exact(sock, payload_len))
-    if masked and mask_key:
-        for i in range(len(payload)):
-            payload[i] ^= mask_key[i % 4]
+    payload = recv_exact(sock, payload_len)
+    if masked and mask_key and payload:
+        mask_bytes = (mask_key * ((len(payload) // 4) + 1))[:len(payload)]
+        payload = np.bitwise_xor(np.frombuffer(payload, dtype=np.uint8), np.frombuffer(mask_bytes, dtype=np.uint8)).tobytes()
     if opcode == 8:
         raise ConnectionError("Server sent WS close")
-    return bytes(payload) if opcode == 2 else None
+    return payload if opcode == 2 else None
 
 
 # --- 1. PC Audio -> Phone Speaker (WASAPI System Loopback) ---
@@ -140,7 +141,7 @@ class PcToPhoneSpeakerTransmitter:
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.audio_queue = queue.Queue(maxsize=15)  # ~300ms buffer capacity for smooth jitter tolerance
+        self.audio_queue = queue.Queue(maxsize=30)  # ~600ms buffer capacity for flawless Wi-Fi jitter tolerance
         self.running = True
         self.current_device_name = "Detecting..."
         
@@ -184,10 +185,9 @@ class PcToPhoneSpeakerTransmitter:
                     except queue.Empty:
                         continue
 
-                    # If network stalls severely (>10 chunks = >200ms lag), trim older backlog to regain sync,
-                    # but NEVER drop on normal jitter (<8 chunks) to keep audio smooth & crackle-free!
-                    if self.audio_queue.qsize() > 10:
-                        while self.audio_queue.qsize() > 3:
+                    # Anti-lag sync: Only trim if extreme network stall occurred (>25 chunks = >500ms lag)
+                    if self.audio_queue.qsize() > 25:
+                        while self.audio_queue.qsize() > 5:
                             try:
                                 self.audio_queue.get_nowait()
                             except Exception:
@@ -312,8 +312,8 @@ class PcToPhoneSpeakerTransmitter:
 
                 pcm_bytes = mono_samples.tobytes()
 
-                # High capacity buffer: allow up to 12 chunks (~240ms) without dropping to absorb network hiccups
-                while self.audio_queue.qsize() >= 12:
+                # High capacity buffer: allow up to 25 chunks (~500ms) without dropping to absorb network hiccups
+                while self.audio_queue.qsize() >= 25:
                     try:
                         self.audio_queue.get_nowait()
                     except Exception:

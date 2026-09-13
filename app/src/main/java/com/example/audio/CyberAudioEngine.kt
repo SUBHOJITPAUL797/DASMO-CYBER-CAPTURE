@@ -58,6 +58,11 @@ class CyberAudioEngine(private val context: Context) {
     @Volatile
     private var currentRouting: AudioRouting = AudioRouting.AUTO
 
+    // Decoupled Jitter Buffer for smooth Wi-Fi speaker playback without stuttering or underruns
+    private val speakerQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(30)
+    @Volatile private var isSpeakerWorkerRunning = false
+    private var speakerWorkerThread: Thread? = null
+
     private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         object : AudioDeviceCallback() {
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
@@ -452,39 +457,98 @@ class CyberAudioEngine(private val context: Context) {
         }
     }
 
-    fun playSpeakerPcmChunk(data: ByteArray, offset: Int, length: Int) {
-        try {
-            val track = audioTrack ?: run {
+    private fun ensureSpeakerWorkerStarted() {
+        if (isSpeakerWorkerRunning && speakerWorkerThread?.isAlive == true) return
+        isSpeakerWorkerRunning = true
+
+        speakerWorkerThread = Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+
+            if (audioTrack == null || audioTrack?.state != AudioTrack.STATE_INITIALIZED) {
                 initSpeakerPlayback(currentRouting, 1.0f)
-                audioTrack
-            } ?: return
-
-            if (track.state != AudioTrack.STATE_INITIALIZED) return
-
-            if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                track.play()
             }
 
-            var totalWritten = 0
-            while (totalWritten < length) {
-                val toWrite = length - totalWritten
-                val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    track.write(data, offset + totalWritten, toWrite, AudioTrack.WRITE_BLOCKING)
-                } else {
-                    track.write(data, offset + totalWritten, toWrite)
-                }
-                if (written <= 0) {
-                    Log.w("CyberAudioEngine", "AudioTrack write stalled or error: $written")
+            var isPrebuffering = true
+
+            while (isSpeakerWorkerRunning) {
+                try {
+                    val track = audioTrack
+                    if (track == null || track.state != AudioTrack.STATE_INITIALIZED) {
+                        Thread.sleep(10)
+                        continue
+                    }
+
+                    // Adaptive Pre-buffer Cushion:
+                    // Wait for 3 chunks (~60ms) before starting or resuming playback after a dropout.
+                    // This 60ms cushion completely absorbs Wi-Fi jitter so the physical speaker never starves!
+                    if (isPrebuffering) {
+                        if (speakerQueue.size < 3) {
+                            Thread.sleep(5)
+                            continue
+                        }
+                        isPrebuffering = false
+                        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                            track.play()
+                        }
+                    }
+
+                    val chunk = speakerQueue.poll(30, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    if (chunk == null) {
+                        // Wi-Fi network stalled and emptied the queue: re-engage prebuffering
+                        isPrebuffering = true
+                        continue
+                    }
+
+                    var totalWritten = 0
+                    while (totalWritten < chunk.size && isSpeakerWorkerRunning) {
+                        val toWrite = chunk.size - totalWritten
+                        val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            track.write(chunk, totalWritten, toWrite, AudioTrack.WRITE_BLOCKING)
+                        } else {
+                            track.write(chunk, totalWritten, toWrite)
+                        }
+                        if (written <= 0) {
+                            break
+                        }
+                        totalWritten += written
+                    }
+                } catch (_: InterruptedException) {
                     break
+                } catch (e: Exception) {
+                    Log.w("CyberAudioEngine", "Speaker playback worker exception", e)
                 }
-                totalWritten += written
             }
+        }, "CyberAudioPlaybackThread").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    fun playSpeakerPcmChunk(data: ByteArray, offset: Int, length: Int) {
+        if (length <= 0) return
+        try {
+            ensureSpeakerWorkerStarted()
+
+            val chunk = data.copyOfRange(offset, offset + length)
+
+            // Anti-lag drift control:
+            // If queue accumulates > 10 chunks (~200ms lag), drop oldest chunk so playback stays real-time
+            while (speakerQueue.size > 10) {
+                speakerQueue.poll()
+            }
+
+            speakerQueue.offer(chunk)
         } catch (e: Exception) {
-            Log.w("CyberAudioEngine", "Error writing to AudioTrack", e)
+            Log.w("CyberAudioEngine", "Error enqueuing speaker PCM chunk", e)
         }
     }
 
     fun stopSpeakerPlayback() {
+        isSpeakerWorkerRunning = false
+        speakerWorkerThread?.interrupt()
+        speakerWorkerThread = null
+        speakerQueue.clear()
+
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
