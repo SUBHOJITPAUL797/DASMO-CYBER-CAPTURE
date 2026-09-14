@@ -43,7 +43,7 @@ class CyberAudioEngine(private val context: Context) {
 
     private var recordJob: Job? = null
     private var broadcastJob: Job? = null
-    private val audioBroadcastChannel = Channel<ByteArray>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val audioBroadcastChannel = Channel<ByteArray>(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val audioStreams = CopyOnWriteArrayList<OutputStream>()
 
     private val _micDbLevel = MutableStateFlow(-60f)
@@ -58,8 +58,8 @@ class CyberAudioEngine(private val context: Context) {
     @Volatile
     private var currentRouting: AudioRouting = AudioRouting.AUTO
 
-    // Decoupled Jitter Buffer for smooth Wi-Fi speaker playback without stuttering or underruns
-    private val speakerQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(30)
+    // Decoupled Low-Latency Buffer for smooth Wi-Fi speaker playback without stuttering or delay
+    private val speakerQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(10)
     @Volatile private var isSpeakerWorkerRunning = false
     private var speakerWorkerThread: Thread? = null
 
@@ -155,10 +155,12 @@ class CyberAudioEngine(private val context: Context) {
 
         try {
             var record: AudioRecord? = null
+            // Prioritize VOICE_RECOGNITION for crystal-clear speech typing (Win+H) and active mic input
             val sources = intArrayOf(
-                MediaRecorder.AudioSource.CAMCORDER,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 MediaRecorder.AudioSource.MIC,
-                MediaRecorder.AudioSource.VOICE_RECOGNITION
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.CAMCORDER
             )
             for (src in sources) {
                 try {
@@ -220,8 +222,10 @@ class CyberAudioEngine(private val context: Context) {
             }
 
             recordJob = scope.launch(Dispatchers.IO) {
-                val pcmBuffer = ShortArray(bufferSize / 2)
-                val byteBuffer = ByteArray(bufferSize)
+                // 20ms chunk size (960 samples at 48kHz) for ultra-low latency speech delivery
+                val chunkSamples = 960
+                val pcmBuffer = ShortArray(chunkSamples)
+                val byteBuffer = ByteArray(chunkSamples * 2)
 
                 while (isActive && audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                     val readShorts = audioRecord?.read(pcmBuffer, 0, pcmBuffer.size) ?: 0
@@ -243,10 +247,10 @@ class CyberAudioEngine(private val context: Context) {
 
                         val bytesToWrite = readShorts * 2
 
-                        // Intelligent noise gate / squelch:
-                        // If sound is below conversational threshold (RMS < 90.0 ~= -51dBFS),
-                        // zero out buffer so ambient hiss and room noise never loop or swell during pauses.
-                        if (!isMuted && rms < 90.0) {
+                        // Subtle digital floor squelch:
+                        // Only zero out true absolute digital silence (RMS < 8.0 ~= -72dBFS)
+                        // All whispers, spoken words, and speech recognition inputs pass through untouched!
+                        if (!isMuted && rms < 8.0) {
                             byteBuffer.fill(0, 0, bytesToWrite)
                         }
 
@@ -309,9 +313,9 @@ class CyberAudioEngine(private val context: Context) {
             audioTrack?.release()
             audioTrack = null
 
-            // Jitter-tolerant buffer size to eliminate DAC starvation and clicks (~85ms at 48kHz 16-bit mono)
+            // Low-latency hardware buffer size (~42ms at 48kHz 16-bit mono)
             val minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
-            val bufferSize = (minBufSize * 3).coerceAtLeast(8192)
+            val bufferSize = (minBufSize * 2).coerceAtLeast(4096)
 
             applyAudioRouting(routing)
 
@@ -526,9 +530,9 @@ class CyberAudioEngine(private val context: Context) {
 
             val chunk = data.copyOfRange(offset, offset + length)
 
-            // Anti-lag drift control:
-            // If queue accumulates > 15 chunks (~300ms lag), drop oldest chunk so playback stays real-time
-            while (speakerQueue.size > 15) {
+            // Ultra-low latency real-time drift control:
+            // Keep queue tight (max 4 chunks = ~80ms buffer) so PC audio and video stay in lockstep
+            while (speakerQueue.size > 4) {
                 speakerQueue.poll()
             }
 

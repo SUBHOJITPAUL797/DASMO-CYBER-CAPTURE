@@ -141,7 +141,7 @@ class PcToPhoneSpeakerTransmitter:
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.audio_queue = queue.Queue(maxsize=30)  # ~600ms buffer capacity for flawless Wi-Fi jitter tolerance
+        self.audio_queue = queue.Queue(maxsize=10)  # Low-latency queue (~80ms buffer)
         self.running = True
         self.current_device_name = "Detecting..."
         
@@ -185,9 +185,10 @@ class PcToPhoneSpeakerTransmitter:
                     except queue.Empty:
                         continue
 
-                    # Anti-lag sync: Only trim if extreme network stall occurred (>25 chunks = >500ms lag)
-                    if self.audio_queue.qsize() > 25:
-                        while self.audio_queue.qsize() > 5:
+                    # Ultra-low latency anti-lag sync:
+                    # If queue builds up beyond 3 chunks (~60ms), flush older chunks so transmission stays real-time
+                    if self.audio_queue.qsize() > 3:
+                        while self.audio_queue.qsize() > 1:
                             try:
                                 self.audio_queue.get_nowait()
                             except Exception:
@@ -307,8 +308,8 @@ class PcToPhoneSpeakerTransmitter:
 
                 pcm_bytes = mono_samples.tobytes()
 
-                # High capacity buffer: allow up to 25 chunks (~500ms) without dropping to absorb network hiccups
-                while self.audio_queue.qsize() >= 25:
+                # Low-latency buffer: cap audio queue to 4 chunks (~80ms max)
+                while self.audio_queue.qsize() >= 4:
                     try:
                         self.audio_queue.get_nowait()
                     except Exception:
@@ -477,12 +478,25 @@ class PhoneMicToPcReceiver:
             if dev_index is not None:
                 stream_kwargs['output_device_index'] = dev_index
             stream = p.open(**stream_kwargs)
+            last_mic_log = 0.0
             try:
                 while self.running:
-                    chunk = recv_ws_binary(sock)
-                    if not chunk:
+                    try:
+                        chunk = recv_ws_binary(sock)
+                        if chunk is None or len(chunk) == 0:
+                            continue
+
+                        now = time.time()
+                        if now - last_mic_log > 2.0:
+                            arr = np.frombuffer(chunk, dtype=np.int16)
+                            peak = int(np.max(np.abs(arr))) if len(arr) > 0 else 0
+                            if peak > 150:
+                                last_mic_log = now
+                                print(f"[PHONE MIC ACTIVE] Peak: {peak} / 32767 -> Relaying to Windows Virtual Mic (Win+H)", flush=True)
+
+                        stream.write(chunk, exception_on_underflow=False)
+                    except (ConnectionError, socket.error):
                         break
-                    stream.write(chunk)
             finally:
                 try:
                     stream.stop_stream()
@@ -501,10 +515,13 @@ class PhoneMicToPcReceiver:
             out_stream.start()
             try:
                 while self.running:
-                    chunk = recv_ws_binary(sock)
-                    if not chunk:
+                    try:
+                        chunk = recv_ws_binary(sock)
+                        if chunk is None or len(chunk) == 0:
+                            continue
+                        out_stream.write(chunk)
+                    except (ConnectionError, socket.error):
                         break
-                    out_stream.write(chunk)
             finally:
                 try:
                     out_stream.stop()

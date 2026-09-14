@@ -1,6 +1,6 @@
 {
   "name": "dasmo-cyber-capture-desktop",
-  "version": "1.4.7",
+  "version": "1.4.8",
   "description": "AirLink Pro - DASMO CYBER CAPTURE Windows Desktop Companion, Virtual Camera & Audio Ecosystem",
   "main": "src/main/main.js",
   "scripts": {
