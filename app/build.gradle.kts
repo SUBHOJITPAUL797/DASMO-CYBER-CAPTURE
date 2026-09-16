@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.dasmocapt.wpxnzv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 12
-    versionName = "1.4.8"
+    versionCode = 13
+    versionName = "1.4.9"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

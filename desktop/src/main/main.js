@@ -333,20 +333,26 @@ ipcMain.handle('driver:install-deps', async () => {
 
 ipcMain.handle('driver:install-audio', () => {
     const { exec } = require('child_process');
-    const psScript = `
-        $zip = Join-Path $env:TEMP 'VBCABLE_Driver_Pack43.zip';
-        $dest = Join-Path $env:TEMP 'VBCABLE_Driver';
-        Write-Host 'Downloading Virtual Audio Driver...';
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-        Invoke-WebRequest -Uri 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip' -OutFile $zip;
-        Expand-Archive -Path $zip -DestinationPath $dest -Force;
-        Start-Process (Join-Path $dest 'VBCABLE_Setup_x64.exe') -Verb RunAs;
-    `;
-    const cleanCmd = psScript.replace(/\r?\n/g, ' ');
-    exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${cleanCmd}"`, (err) => {
-        if (err) console.warn('[Install Audio Driver]', err);
-    });
-    return true;
+    const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
+    if (fs.existsSync(batPath)) {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+            if (err) console.warn('[Setup DASMO Virtual Audio]', err);
+        });
+        return { success: true, message: 'DASMO Virtual Microphone setup launched with Administrator privileges' };
+    }
+    return { success: false, message: 'Installer script not found' };
+});
+
+ipcMain.handle('driver:uninstall-audio', () => {
+    const { exec } = require('child_process');
+    const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
+    if (fs.existsSync(batPath)) {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\" -Uninstall\\"' -Verb RunAs"`, (err) => {
+            if (err) console.warn('[Uninstall DASMO Virtual Audio]', err);
+        });
+        return { success: true, message: 'DASMO Virtual Hardware uninstaller launched' };
+    }
+    return { success: false, message: 'Installer script not found' };
 });
 
 ipcMain.handle('driver:install-cam-driver', () => {
@@ -363,12 +369,12 @@ ipcMain.handle('driver:install-cam-driver', () => {
 
 ipcMain.handle('driver:configure-device-names', () => {
     const { exec } = require('child_process');
-    const batPath = getDriverScriptPath('setup_dasmo_device_names.bat');
+    const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
     if (fs.existsSync(batPath)) {
         exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
             if (err) console.warn('[Configure Device Names]', err);
         });
-        return { success: true, message: 'Device name setup launched with Administrator privileges' };
+        return { success: true, message: 'Device branding setup launched with Administrator privileges' };
     }
     return { success: false, message: 'Setup script not found' };
 });

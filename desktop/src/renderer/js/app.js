@@ -800,8 +800,38 @@ async function checkDriverEnv() {
         }
     });
 
-    document.getElementById('btnInstallAudioDriver')?.addEventListener('click', () => {
-        window.dasmoAPI?.installAudioDriver();
+    document.getElementById('btnConfigureDeviceNames')?.addEventListener('click', async () => {
+        const audioStatus = document.getElementById('audioDriverStatusText');
+        if (audioStatus) audioStatus.innerText = 'Configuring DASMO Hardware (Check Windows prompt)...';
+        try {
+            await window.dasmoAPI.configureDeviceNames();
+            if (audioStatus) audioStatus.innerText = '✓ DASMO Hardware configuration launched!';
+        } catch (e) {
+            if (audioStatus) audioStatus.innerText = `Error: ${e.message}`;
+        }
+    });
+
+    document.getElementById('btnInstallAudioDriver')?.addEventListener('click', async () => {
+        const audioStatus = document.getElementById('audioDriverStatusText');
+        if (audioStatus) audioStatus.innerText = 'Setting up DASMO Virtual Mic (Check Windows prompt)...';
+        try {
+            await window.dasmoAPI.installAudioDriver();
+            if (audioStatus) audioStatus.innerText = '✓ DASMO Virtual Mic setup launched!';
+        } catch (e) {
+            if (audioStatus) audioStatus.innerText = `Error: ${e.message}`;
+        }
+    });
+
+    document.getElementById('btnUninstallAudioDriver')?.addEventListener('click', async () => {
+        if (!confirm('Completely uninstall DASMO Virtual Audio device from Windows?')) return;
+        const audioStatus = document.getElementById('audioDriverStatusText');
+        if (audioStatus) audioStatus.innerText = 'Uninstalling DASMO Virtual Audio (Check Windows prompt)...';
+        try {
+            await window.dasmoAPI.uninstallAudioDriver();
+            if (audioStatus) audioStatus.innerText = '✓ DASMO Virtual Audio uninstalled cleanly.';
+        } catch (e) {
+            if (audioStatus) audioStatus.innerText = `Error: ${e.message}`;
+        }
     });
 
     window.dasmoAPI.onDriverStatusChange((data) => {

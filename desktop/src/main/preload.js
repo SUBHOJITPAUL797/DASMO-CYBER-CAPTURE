@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
     installCameraDriver: () => ipcRenderer.invoke('driver:install-cam-driver'),
     configureDeviceNames: () => ipcRenderer.invoke('driver:configure-device-names'),
     installAudioDriver: () => ipcRenderer.invoke('driver:install-audio'),
+    uninstallAudioDriver: () => ipcRenderer.invoke('driver:uninstall-audio'),
     startVirtualCamera: (phoneIp) => ipcRenderer.invoke('driver:start-cam', phoneIp),
     stopVirtualCamera: () => ipcRenderer.invoke('driver:stop-cam'),
     startAudioBridge: (phoneIp) => ipcRenderer.invoke('driver:start-audio-bridge', phoneIp),

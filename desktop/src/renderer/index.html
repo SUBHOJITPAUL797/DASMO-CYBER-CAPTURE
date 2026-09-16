@@ -214,33 +214,35 @@
                             <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                                 <button class="hud-btn" id="btnInstallDeps">📦 Install Dependencies</button>
                                 <button class="hud-btn glow" id="btnInstallCamDriver" style="background: rgba(0, 240, 255, 0.15); border-color: var(--cyan); color: var(--cyan);">🎥 1-Click Register Camera</button>
-                                <button class="hud-btn glow" id="btnConfigureDeviceNames" style="background: rgba(0, 255, 136, 0.15); border-color: var(--green); color: var(--green);">⚡ 1-Click Name Devices (DASMO MIC / SPEAKER / CAM)</button>
+                                <button class="hud-btn glow" id="btnConfigureDeviceNames" style="background: rgba(0, 255, 136, 0.15); border-color: var(--green); color: var(--green);">⚡ 1-Click Setup DASMO Hardware</button>
                             </div>
                         </div>
                     </div>
 
                     <div class="card-title" style="margin-top: 10px;">
-                        <span>WINDOWS VIRTUAL AUDIO DEVICE SETUP</span>
-                        <span style="font-size: 10px; color: var(--green);">MICROPHONE & SPEAKER RELAY</span>
+                        <span>DASMO VIRTUAL MICROPHONE SETUP</span>
+                        <span style="font-size: 10px; color: var(--green);">PHONE MIC & VOICE TYPING (WIN + H)</span>
                     </div>
                     <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
-                        To route phone microphone and PC system audio seamlessly in Windows Volume Mixer:
+                        Routes your phone's microphone directly into Windows as <b>DASMO Virtual Microphone</b> for Windows Voice Typing (<code>Win + H</code>), Discord, WhatsApp Desktop, Zoom, and Teams.
                     </p>
-                    <div style="background: var(--surface-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="background: var(--surface-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                         <div>
-                            <b style="font-size: 13px; color: var(--text-primary);">Virtual Audio Driver:</b>
-                            <div style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">Adds DASMO MIC (Input) & DASMO SPEAKER (Output) to Windows</div>
+                            <b style="font-size: 13px; color: var(--text-primary);">Virtual Microphone Hardware:</b>
+                            <div id="audioDriverStatusText" style="font-size: 11px; color: var(--green); font-family: var(--font-mono);">● DASMO Virtual Microphone Ready</div>
                         </div>
-                        <button class="hud-btn" id="btnInstallAudioDriver">🎧 1-Click Install Audio Driver</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="hud-btn" id="btnInstallAudioDriver" style="border-color: var(--cyan); color: var(--cyan);">🎙️ 1-Click Setup Mic</button>
+                            <button class="hud-btn" id="btnUninstallAudioDriver" style="border-color: #ff4757; color: #ff4757;">🗑️ Clean Uninstall</button>
+                        </div>
                     </div>
 
-                    <div class="card-title" style="margin-top: 10px;">WHATSAPP / ZOOM / TEAMS SETUP GUIDE</div>
+                    <div class="card-title" style="margin-top: 10px;">HOW TO USE WITH WINDOWS & APPS</div>
                     <div style="font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 10px; line-height: 1.5;">
-                        <div>1. Click <b>"Start Virtual Cam"</b> on the dashboard.</div>
-                        <div>2. Open WhatsApp Desktop &gt; <b>Settings &gt; Audio & Video</b> (or Zoom / Teams Settings).</div>
-                        <div>3. Under <b>Camera</b>, select <b>"DASMO CAMERA"</b> (or "DASMO CYBER CAPTURE" / "Unity Video Capture").</div>
-                        <div>4. Under <b>Microphone</b>, select <b>"DASMO MIC"</b> (or "CABLE Output").</div>
-                        <div>5. In Windows <b>Settings &gt; System &gt; Sound &gt; Output</b>, select <b>"DASMO SPEAKER"</b> (or "CABLE Input") to stream PC audio directly out of your mobile phone.</div>
+                        <div>1. Press <b>"Start Virtual Cam & Mic"</b> on the dashboard.</div>
+                        <div>2. <b>Windows Voice Typing (Speech to Text):</b> Press <code>Win + H</code> to speak directly into your phone and type anywhere.</div>
+                        <div>3. <b>WhatsApp / Zoom / Discord:</b> In settings, set Microphone to <b>"DASMO Virtual Microphone"</b> and Camera to <b>"DASMO CAMERA"</b>.</div>
+                        <div>4. <b>PC Sound:</b> Your speakers & headphones remain your default output for crystal clear music without any manual switching.</div>
                     </div>
                 </div>
             </div>

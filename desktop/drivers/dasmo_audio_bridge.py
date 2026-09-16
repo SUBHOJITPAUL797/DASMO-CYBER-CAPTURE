@@ -231,39 +231,32 @@ class PcToPhoneSpeakerTransmitter:
     def _run_pyaudiowpatch_loop(self):
         p = GLOBAL_PA
         loopback_dev = None
+
+        def is_virtual_or_mic_device(name):
+            name_l = name.lower()
+            return any(k in name_l for k in ['cable', 'virtual', 'vb-audio', 'dasmo', '{769552b1', '{b1d118cd', 'line in', 'stereo mix'])
+
+        # 1. First check default WASAPI loopback, but ensure it is NOT a virtual cable / mic bridge
         try:
             cur_def = p.get_default_wasapi_loopback()
-            if cur_def:
+            if cur_def and not is_virtual_or_mic_device(cur_def['name']):
                 loopback_dev = cur_def
         except Exception:
             pass
 
+        # 2. If default was a virtual device (or None), search for physical speakers / headphones loopback
         if not loopback_dev:
-            # First pass: find a physical loopback device (Speakers, Realtek, Headphones)
             for i in range(p.get_device_count()):
                 try:
                     dev = p.get_device_info_by_index(i)
-                    if dev.get('isLoopbackDevice'):
-                        name_lower = dev['name'].lower()
-                        if not any(k in name_lower for k in ['cable', 'virtual', 'vb-audio']):
-                            loopback_dev = dev
-                            break
-                except Exception:
-                    pass
-
-        if not loopback_dev:
-            # Fallback to any loopback device if no physical one found
-            for i in range(p.get_device_count()):
-                try:
-                    dev = p.get_device_info_by_index(i)
-                    if dev.get('isLoopbackDevice'):
+                    if dev.get('isLoopbackDevice') and not is_virtual_or_mic_device(dev['name']):
                         loopback_dev = dev
                         break
                 except Exception:
                     pass
 
         if not loopback_dev:
-            print("[!] No WASAPI loopback device found. Waiting...", flush=True)
+            print("[!] No physical WASAPI loopback device found. Waiting...", flush=True)
             time.sleep(3.0)
             return
 
@@ -357,7 +350,7 @@ class PcToPhoneSpeakerTransmitter:
         loopback_dev = None
         for i, dev in enumerate(sd.query_devices()):
             name = dev['name'].lower()
-            if dev['max_input_channels'] > 0 and 'loopback' in name and not any(k in name for k in ['cable', 'virtual', 'vb-audio']):
+            if dev['max_input_channels'] > 0 and 'loopback' in name and not any(k in name for k in ['cable', 'virtual', 'vb-audio', 'dasmo', '{769552b1', '{b1d118cd', 'line in', 'stereo mix']):
                 loopback_dev = i
                 break
 
@@ -413,29 +406,54 @@ class PhoneMicToPcReceiver:
                 print(f"[*] Phone mic reconnection notice: {e} - auto-reconnecting in 0.5s...", flush=True)
             time.sleep(0.5)
 
-    def _stream_mic(self):
-        cable_dev_index = None
+    def _find_virtual_cable_index(self):
+        """Finds the virtual microphone hardware injection device, strictly excluding physical speakers."""
         if HAS_PYAUDIO_WPATCH and GLOBAL_PA:
             p = GLOBAL_PA
+            # First pass: WASAPI virtual audio target
             for i in range(p.get_device_count()):
                 try:
                     d = p.get_device_info_by_index(i)
-                    if d['maxOutputChannels'] > 0 and 'cable' in d['name'].lower() and 'wasapi' in p.get_host_api_info_by_index(d['hostApi'])['name'].lower():
-                        cable_dev_index = d['index']
-                        print(f"[+] Found WASAPI Virtual Cable Target: '{d['name']}'", flush=True)
-                        break
+                    if d['maxOutputChannels'] > 0:
+                        name_l = d['name'].lower()
+                        host_api = p.get_host_api_info_by_index(d['hostApi'])['name'].lower()
+                        if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']) and 'wasapi' in host_api:
+                            if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                                return d['index']
                 except Exception:
                     pass
-            if cable_dev_index is None:
-                for i in range(p.get_device_count()):
-                    try:
-                        d = p.get_device_info_by_index(i)
-                        if d['maxOutputChannels'] > 0 and ('cable' in d['name'].lower() or 'virtual' in d['name'].lower()):
-                            cable_dev_index = d['index']
-                            print(f"[+] Found Virtual Cable Target: '{d['name']}'", flush=True)
-                            break
-                    except Exception:
-                        pass
+            # Second pass: Any host API (MME, DirectSound, WDM-KS) matching virtual audio device
+            for i in range(p.get_device_count()):
+                try:
+                    d = p.get_device_info_by_index(i)
+                    if d['maxOutputChannels'] > 0:
+                        name_l = d['name'].lower()
+                        if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']):
+                            if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                                return d['index']
+                except Exception:
+                    pass
+        elif HAS_SOUNDDEVICE:
+            for i, dev in enumerate(sd.query_devices()):
+                if dev['max_output_channels'] > 0:
+                    name_l = dev['name'].lower()
+                    if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']):
+                        if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                            return i
+        return None
+
+    def _stream_mic(self):
+        cable_dev_index = self._find_virtual_cable_index()
+        if cable_dev_index is not None:
+            if HAS_PYAUDIO_WPATCH and GLOBAL_PA:
+                dev_info = GLOBAL_PA.get_device_info_by_index(cable_dev_index)
+                print(f"[+] Found DASMO Virtual Audio Target: '{dev_info['name']}' (Index {cable_dev_index})", flush=True)
+            elif HAS_SOUNDDEVICE:
+                print(f"[+] Found DASMO Virtual Audio Target Index: {cable_dev_index}", flush=True)
+        else:
+            print("[!] DASMO Virtual Microphone is not detected in Windows.", flush=True)
+            print("[!] Phone mic will NOT play to PC physical speakers to prevent voice echo feedback.", flush=True)
+            print("[*] Please run 'setup_dasmo_virtual_mic.bat' (or click 'Setup Mic' in app) to register device.", flush=True)
 
         # 1. Try WebSocket microphone stream first (dedicated /ws/mic channel)
         sock = None
@@ -466,81 +484,100 @@ class PhoneMicToPcReceiver:
                 self._play_with_sounddevice(resp)
 
     def _play_ws_mic(self, sock, dev_index):
-        if HAS_PYAUDIO_WPATCH and GLOBAL_PA:
-            p = GLOBAL_PA
-            stream_kwargs = {
-                'format': pyaudio.paInt16,
-                'channels': 1,
-                'rate': SAMPLE_RATE,
-                'output': True,
-                'frames_per_buffer': BLOCK_SIZE
-            }
-            if dev_index is not None:
-                stream_kwargs['output_device_index'] = dev_index
-            stream = p.open(**stream_kwargs)
-            last_mic_log = 0.0
+        p = GLOBAL_PA if HAS_PYAUDIO_WPATCH else None
+        stream = None
+        current_dev = dev_index
+
+        if current_dev is not None and p:
             try:
-                while self.running:
-                    try:
-                        chunk = recv_ws_binary(sock)
-                        if chunk is None or len(chunk) == 0:
-                            continue
+                stream_kwargs = {
+                    'format': pyaudio.paInt16,
+                    'channels': 1,
+                    'rate': SAMPLE_RATE,
+                    'output': True,
+                    'frames_per_buffer': BLOCK_SIZE,
+                    'output_device_index': current_dev
+                }
+                stream = p.open(**stream_kwargs)
+                print(f"[+] Outputting Phone Mic strictly into Virtual Mic Device (Index {current_dev})", flush=True)
+            except Exception as e:
+                print(f"[!] Error opening virtual mic device: {e}", flush=True)
+                stream = None
 
-                        now = time.time()
-                        if now - last_mic_log > 2.0:
-                            arr = np.frombuffer(chunk, dtype=np.int16)
-                            peak = int(np.max(np.abs(arr))) if len(arr) > 0 else 0
-                            if peak > 150:
-                                last_mic_log = now
-                                print(f"[PHONE MIC ACTIVE] Peak: {peak} / 32767 -> Relaying to Windows Virtual Mic (Win+H)", flush=True)
+        last_mic_log = 0.0
+        last_dev_scan = time.time()
 
+        try:
+            while self.running:
+                try:
+                    chunk = recv_ws_binary(sock)
+                    if chunk is None or len(chunk) == 0:
+                        continue
+
+                    now = time.time()
+
+                    # Periodic auto-detection of virtual device if not available at startup
+                    if stream is None and p and (now - last_dev_scan > 2.5):
+                        last_dev_scan = now
+                        new_dev = self._find_virtual_cable_index()
+                        if new_dev is not None:
+                            try:
+                                stream = p.open(
+                                    format=pyaudio.paInt16,
+                                    channels=1,
+                                    rate=SAMPLE_RATE,
+                                    output=True,
+                                    frames_per_buffer=BLOCK_SIZE,
+                                    output_device_index=new_dev
+                                )
+                                current_dev = new_dev
+                                print(f"[SUCCESS] DASMO Virtual Audio Device registered! Connected to Index {new_dev}", flush=True)
+                            except Exception as ex:
+                                stream = None
+
+                    # Log peak activity
+                    if now - last_mic_log > 2.0:
+                        arr = np.frombuffer(chunk, dtype=np.int16)
+                        peak = int(np.max(np.abs(arr))) if len(arr) > 0 else 0
+                        if peak > 150:
+                            last_mic_log = now
+                            if stream is not None:
+                                print(f"[DASMO MIC ACTIVE] Peak: {peak} / 32767 -> Relayed to 'DASMO Virtual Microphone' (Win+H Ready)", flush=True)
+                            else:
+                                print(f"[PHONE MIC ACTIVE] Peak: {peak} / 32767 (Muted to PC speakers to prevent echo loop)", flush=True)
+
+                    if stream is not None:
                         stream.write(chunk, exception_on_underflow=False)
-                    except (ConnectionError, socket.error):
-                        break
-            finally:
+                except (ConnectionError, socket.error):
+                    break
+        finally:
+            if stream is not None:
                 try:
                     stream.stop_stream()
                     stream.close()
                 except Exception:
                     pass
-        elif HAS_SOUNDDEVICE:
-            stream_kwargs = {
-                'samplerate': SAMPLE_RATE,
-                'channels': 1,
-                'dtype': 'int16'
-            }
-            if dev_index is not None:
-                stream_kwargs['device'] = dev_index
-            out_stream = sd.RawOutputStream(**stream_kwargs)
-            out_stream.start()
-            try:
-                while self.running:
-                    try:
-                        chunk = recv_ws_binary(sock)
-                        if chunk is None or len(chunk) == 0:
-                            continue
-                        out_stream.write(chunk)
-                    except (ConnectionError, socket.error):
-                        break
-            finally:
-                try:
-                    out_stream.stop()
-                    out_stream.close()
-                except Exception:
-                    pass
 
     def _play_with_pyaudiowpatch(self, resp, dev_index):
+        if dev_index is None:
+            dev_index = self._find_virtual_cable_index()
+        if dev_index is None:
+            print("[!] Virtual Microphone not detected. Mic muted to PC speakers to prevent echo loop.", flush=True)
+            while self.running:
+                chunk = resp.read(2048)
+                if not chunk:
+                    break
+            return
+
         p = GLOBAL_PA
         stream_kwargs = {
             'format': pyaudio.paInt16,
             'channels': 1,
             'rate': SAMPLE_RATE,
             'output': True,
-            'frames_per_buffer': BLOCK_SIZE
+            'frames_per_buffer': BLOCK_SIZE,
+            'output_device_index': dev_index
         }
-        if dev_index is not None:
-            stream_kwargs['output_device_index'] = dev_index
-
         stream = p.open(**stream_kwargs)
         try:
             while self.running:
@@ -556,23 +593,21 @@ class PhoneMicToPcReceiver:
                 pass
 
     def _play_with_sounddevice(self, resp):
-        cable_dev = None
-        try:
-            for i, dev in enumerate(sd.query_devices()):
-                if dev['max_output_channels'] > 0 and ('cable' in dev['name'].lower() or 'virtual' in dev['name'].lower()):
-                    cable_dev = i
+        dev_index = self._find_virtual_cable_index()
+        if dev_index is None:
+            print("[!] Virtual Microphone not detected. Mic muted to PC speakers to prevent echo loop.", flush=True)
+            while self.running:
+                chunk = resp.read(2048)
+                if not chunk:
                     break
-        except Exception:
-            pass
+            return
 
         stream_kwargs = {
             'samplerate': SAMPLE_RATE,
             'channels': 1,
-            'dtype': 'int16'
+            'dtype': 'int16',
+            'device': dev_index
         }
-        if cable_dev is not None:
-            stream_kwargs['device'] = cable_dev
-
         out_stream = sd.RawOutputStream(**stream_kwargs)
         out_stream.start()
         try:
