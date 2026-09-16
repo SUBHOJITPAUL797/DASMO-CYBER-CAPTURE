@@ -442,7 +442,11 @@ ipcMain.handle('phone:control', (event, { action, value }) => {
 });
 
 ipcMain.handle('updater:check', async () => {
-    return await checkForDesktopUpdates('1.0.0');
+    return await checkForDesktopUpdates(app.getVersion());
+});
+
+ipcMain.handle('app:get-version', () => {
+    return app.getVersion();
 });
 
 ipcMain.handle('shell:open-external', (event, url) => {

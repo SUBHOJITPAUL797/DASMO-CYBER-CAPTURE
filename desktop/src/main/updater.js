@@ -3,7 +3,7 @@ const https = require('https');
 const GITHUB_REPO = 'SUBHOJITPAUL797/DASMO-CYBER-CAPTURE';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
-function checkForDesktopUpdates(currentVersion = '1.0.0') {
+function checkForDesktopUpdates(currentVersion = '1.4.9') {
     return new Promise((resolve) => {
         const options = {
             headers: {

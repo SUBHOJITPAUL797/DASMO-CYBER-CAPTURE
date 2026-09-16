@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
 
     // OTA Updates
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    getAppVersion: () => ipcRenderer.invoke('app:get-version'),
 
     // External URLs
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)

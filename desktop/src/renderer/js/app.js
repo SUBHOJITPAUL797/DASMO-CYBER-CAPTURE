@@ -884,6 +884,15 @@ async function initSettings() {
     });
 
     // Update Checker
+    if (window.dasmoAPI?.getAppVersion) {
+        window.dasmoAPI.getAppVersion().then(v => {
+            const el = document.getElementById('desktopVersionText');
+            if (el) el.innerText = `Current: v${v} (Latest)`;
+            const modalCur = document.getElementById('modalCurrentVer');
+            if (modalCur) modalCur.innerText = `CURRENT: v${v}`;
+        }).catch(() => {});
+    }
+
     document.getElementById('btnCheckDesktopUpdates')?.addEventListener('click', () => {
         checkDesktopUpdates(true);
     });
@@ -914,6 +923,10 @@ async function checkDesktopUpdates(isManual = false) {
 
     try {
         const updateInfo = await window.dasmoAPI.checkForUpdates();
+        const currentVer = (updateInfo && updateInfo.currentVersion) || (await window.dasmoAPI.getAppVersion?.()) || '1.4.9';
+        const modalCur = document.getElementById('modalCurrentVer');
+        if (modalCur) modalCur.innerText = `CURRENT: v${currentVer}`;
+
         if (updateInfo && updateInfo.isUpdateAvailable) {
             latestUpdateData = updateInfo;
             document.getElementById('modalLatestVer').innerText = `LATEST: v${updateInfo.latestVersion}`;
@@ -933,11 +946,11 @@ async function checkDesktopUpdates(isManual = false) {
             }
         } else {
             if (versionText) {
-                versionText.innerText = `Current: v1.0.0 (Latest)`;
+                versionText.innerText = `Current: v${currentVer} (Latest)`;
                 versionText.style.color = 'var(--text-muted)';
             }
             if (isManual) {
-                alert('You are already on the latest version of DASMO CYBER CAPTURE (v1.0.0)!');
+                alert(`You are already on the latest version of DASMO CYBER CAPTURE (v${currentVer})!`);
             }
         }
     } catch (e) {
