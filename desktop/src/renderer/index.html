@@ -126,6 +126,41 @@
                     </button>
                 </div>
 
+                <!-- Portal Live Photo AI Background Toolbar -->
+                <div class="portal-bg-toolbar" id="portalBgToolbar">
+                    <div class="portal-bg-toolbar-title">
+                        <span style="font-size: 18px;">🎯</span>
+                        <div style="display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">GOVERNMENT PORTAL LIVE PHOTO · AI BACKGROUND</span>
+                                <span style="font-size: 9px; color: var(--green); font-family: var(--font-mono); font-weight: 700;" id="badgeWebcamBg">RAW CAMERA</span>
+                            </div>
+                            <span style="font-size: 10px; color: var(--text-secondary);">DirectShow DASMO CAMERA streams selected solid background to SSC, UPSC, NTA, Passport, KYC portals</span>
+                        </div>
+                    </div>
+                    <div class="portal-bg-toolbar-actions">
+                        <button class="bg-mode-btn active" id="btnBgRaw" data-mode="raw">
+                            📷 Raw
+                        </button>
+                        <button class="bg-mode-btn glow-white" id="btnBgWhite" data-mode="color" data-r="255" data-g="255" data-b="255" style="background: #ffffff; color: #000; font-weight: 800; border-color: #fff;">
+                            ⚪ Pure White (SSC/Govt)
+                        </button>
+                        <button class="bg-mode-btn" id="btnBgBlue" data-mode="color" data-r="33" data-g="150" data-b="243" style="background: #1e88e5; color: #fff; font-weight: 700;">
+                            🔵 Blue
+                        </button>
+                        <button class="bg-mode-btn" id="btnBgRed" data-mode="color" data-r="229" data-g="57" data-b="53" style="background: #e53935; color: #fff; font-weight: 700;">
+                            🔴 Red
+                        </button>
+                        <div class="portal-bg-custom">
+                            <input type="color" id="inputCustomBgColor" value="#00e5ff" style="width: 24px; height: 24px; border: none; border-radius: 4px; cursor: pointer; background: transparent;" title="Pick custom color">
+                            <span style="font-size: 10px; font-family: var(--font-mono); color: var(--text-primary);" id="lblCustomColorHex">#00E5FF</span>
+                            <button class="hud-btn" id="btnApplyCustomBg" style="padding: 3px 8px; font-size: 10px;">
+                                🎨 Custom
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Adjustments & Hardware Sliders -->
                 <div class="adjustments-grid">
                     <!-- Audio Studio Card -->
@@ -183,45 +218,6 @@
                             <button class="hud-btn" style="justify-content: center;" onclick="sendControl('filter', 'CYBER_HUD')">🎯 Cyber HUD</button>
                             <button class="hud-btn" style="justify-content: center;" onclick="sendControl('filter', 'MATRIX_RAIN')">Matrix Rain</button>
                             <button class="hud-btn" style="justify-content: center;" onclick="sendControl('filter', 'NIGHT_VISION')">Night Vision</button>
-                        </div>
-                    </div>
-
-                    <!-- AI Webcam Background for Portal Live Photo -->
-                    <div class="card" id="cardWebcamBg">
-                        <div class="card-title">
-                            <span>AI WEBCAM BACKGROUND · PORTAL LIVE PHOTO</span>
-                            <span style="font-size: 10px; color: var(--green); font-family: var(--font-mono);" id="badgeWebcamBg">RAW CAMERA</span>
-                        </div>
-
-                        <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 8px;">
-                            Changes your live PC webcam (<b>DASMO CAMERA</b>) background in real-time. When government & exam portals (SSC, UPSC, NTA, Passport, KYC) capture a live photo via webcam, they receive your selected solid background!
-                        </div>
-
-                        <!-- 1-Click Color Selector Buttons -->
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
-                            <button class="bg-mode-btn active" id="btnBgRaw" data-mode="raw">
-                                📷 Raw
-                            </button>
-                            <button class="bg-mode-btn glow-white" id="btnBgWhite" data-mode="color" data-r="255" data-g="255" data-b="255" style="background: #ffffff; color: #000; font-weight: 700;">
-                                ⚪ White
-                            </button>
-                            <button class="bg-mode-btn" id="btnBgBlue" data-mode="color" data-r="33" data-g="150" data-b="243" style="background: #1e88e5; color: #fff; font-weight: 700;">
-                                🔵 Blue
-                            </button>
-                            <button class="bg-mode-btn" id="btnBgRed" data-mode="color" data-r="229" data-g="57" data-b="53" style="background: #e53935; color: #fff; font-weight: 700;">
-                                🔴 Red
-                            </button>
-                        </div>
-
-                        <!-- Custom Color Picker Row -->
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 6px 10px; background: var(--surface-card); border: 1px solid var(--border-color); border-radius: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <input type="color" id="inputCustomBgColor" value="#00e5ff" style="width: 28px; height: 28px; border: none; border-radius: 4px; cursor: pointer; background: transparent;">
-                                <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-primary);" id="lblCustomColorHex">#00E5FF</span>
-                            </div>
-                            <button class="hud-btn" id="btnApplyCustomBg" style="padding: 4px 10px; font-size: 10px;">
-                                🎨 Apply Custom Color
-                            </button>
                         </div>
                     </div>
                 </div>

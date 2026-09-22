@@ -1112,7 +1112,7 @@ class UltraLowLatencyStreamViewer {
                     locateFile: (file) => `vendor/mediapipe/${file}`
                 });
                 this.segmenter.setOptions({
-                    modelSelection: 1,
+                    modelSelection: 0,
                     selfieMode: false
                 });
                 this.segmenter.onResults((results) => {
@@ -1313,8 +1313,15 @@ class UltraLowLatencyStreamViewer {
 
                     if (this.bgMode === 'color' && this.segmentationReady) {
                         if (!this.isSegmenting && this.segmenter) {
+                            if (!this.inputCanvas) {
+                                this.inputCanvas = document.createElement('canvas');
+                                this.inputCanvas.width = 256;
+                                this.inputCanvas.height = 256;
+                                this.inputCtx = this.inputCanvas.getContext('2d');
+                            }
+                            this.inputCtx.drawImage(bitmap, 0, 0, 256, 256);
                             this.isSegmenting = true;
-                            this.segmenter.send({ image: bitmap }).catch(() => { this.isSegmenting = false; });
+                            this.segmenter.send({ image: this.inputCanvas }).catch(() => { this.isSegmenting = false; });
                         }
 
                         if (this.latestMask) {
@@ -1331,8 +1338,10 @@ class UltraLowLatencyStreamViewer {
                             this.ctx.fillStyle = this.bgColor.hex || '#FFFFFF';
                             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-                            // 2. Offscreen composite person
+                            // 2. Offscreen composite person with high-quality smoothing
                             this.offCtx.clearRect(0, 0, bitmap.width, bitmap.height);
+                            this.offCtx.imageSmoothingEnabled = true;
+                            this.offCtx.imageSmoothingQuality = 'high';
                             this.offCtx.drawImage(this.latestMask, 0, 0, bitmap.width, bitmap.height);
                             this.offCtx.globalCompositeOperation = 'source-in';
                             this.offCtx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
