@@ -221,9 +221,12 @@ class AIBgSegmenter:
 
 ai_segmenter = AIBgSegmenter(initial_mode=INIT_MODE, initial_color=INIT_COLOR)
 
+current_freeze_frame = None
+freeze_lock = threading.Lock()
 
 def stdin_control_loop(segmenter):
-    """Listens for dynamic background color commands from desktop companion UI."""
+    """Listens for dynamic background color and freeze/unfreeze commands from desktop companion UI."""
+    global current_freeze_frame
     while True:
         try:
             line = sys.stdin.readline()
@@ -241,12 +244,26 @@ def stdin_control_loop(segmenter):
                     g = int(parts[3])
                     b = int(parts[4])
                     segmenter.set_mode("color", (r, g, b))
+            elif parts[0] == "FREEZE_FILE" and len(parts) >= 2:
+                img_path = line[len("FREEZE_FILE "):].strip()
+                if os.path.exists(img_path):
+                    bgr = cv2.imread(img_path)
+                    if bgr is not None:
+                        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                        with freeze_lock:
+                            current_freeze_frame = rgb
+                        print(f"[VirtualCam] Frozen on studio photo: {img_path}", flush=True)
+            elif parts[0] == "UNFREEZE":
+                with freeze_lock:
+                    current_freeze_frame = None
+                print("[VirtualCam] Resumed live camera stream", flush=True)
         except Exception:
             time.sleep(0.1)
 
 
 stdin_thread = threading.Thread(target=stdin_control_loop, args=(ai_segmenter,), daemon=True)
 stdin_thread.start()
+
 
 
 def decode_jpeg_to_rgb(jpeg_bytes):
@@ -467,6 +484,16 @@ def stream_loop(cam_instance):
     target_h = cam_instance.height
     last_valid_frame = None
     while True:
+        with freeze_lock:
+            frozen = current_freeze_frame
+
+        if frozen is not None:
+            if frozen.shape[1] != target_w or frozen.shape[0] != target_h:
+                frozen = cv2.resize(frozen, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            cam_instance.send(frozen)
+            cam_instance.sleep_until_next_frame()
+            continue
+
         r, f = grabber.read()
         if r and f is not None:
             if f.shape[1] != target_w or f.shape[0] != target_h:

@@ -1,7 +1,7 @@
 """
-DASMO CYBER CAPTURE - Studio AI Background Removal Engine
-Uses deep human segmentation models (u2net_human_seg / silueta / isnet-general-use)
-to produce studio-grade transparent PNGs for passport, KYC, and government portal live photos.
+DASMO CYBER CAPTURE - Studio AI Background Removal Engine (v1.6.0)
+Deep Neural Portrait Matting + Photoshop-grade Edge Defringing & Anti-Aliasing
+Supports: isnet-general-use, birefnet-portrait, silueta, u2netp
 """
 
 import sys
@@ -10,95 +10,132 @@ import io
 import time
 import json
 import base64
+import numpy as np
 from PIL import Image
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 try:
     import rembg
 except ImportError:
     rembg = None
 
-# Global cached sessions
 CACHED_SESSIONS = {}
 
-def get_session(model_name="u2net_human_seg"):
+def get_session(model_name="isnet-general-use"):
     if not rembg:
         raise RuntimeError("rembg is not installed in Python environment")
     
     if model_name not in CACHED_SESSIONS:
-        # Try requested model, with fallback chain
-        fallback_models = [model_name, "u2net_human_seg", "silueta", "u2netp", "isnet-general-use"]
+        # Priority order: isnet-general-use -> birefnet-portrait -> silueta -> default
+        fallback_models = [model_name, "isnet-general-use", "birefnet-portrait", "silueta", "u2netp"]
         session = None
         for m in fallback_models:
             try:
                 session = rembg.new_session(m)
                 CACHED_SESSIONS[m] = session
                 model_name = m
+                sys.stderr.write(f"[bg_remove] Successfully loaded session for: {m}\n")
+                sys.stderr.flush()
                 break
             except Exception as e:
-                sys.stderr.write(f"[bg_remove] Failed loading model {m}: {e}\n")
+                sys.stderr.write(f"[bg_remove] Model {m} not ready: {e}\n")
+                sys.stderr.flush()
         
         if not session:
-            # Fallback to default rembg session
             session = rembg.new_session()
             CACHED_SESSIONS["default"] = session
     
     return CACHED_SESSIONS.get(model_name) or CACHED_SESSIONS.get("default")
 
-def remove_background_image(pil_img, model_name="u2net_human_seg"):
+def refine_photoshop_matting(pil_img, model_name="isnet-general-use"):
     """
-    Takes a PIL Image (RGB or RGBA) and returns a transparent RGBA PIL Image with background removed.
+    Runs deep segmentation + Photoshop-grade edge decontamination (defringe)
+    and sub-pixel alpha smoothing.
     """
     session = get_session(model_name)
-    # post_process_mask=True applies morphological smoothing to eliminate speckles
-    result = rembg.remove(
+    
+    # 1. Deep AI segmentation
+    raw_rgba = rembg.remove(
         pil_img,
         session=session,
-        post_process_mask=True,
-        alpha_matting=True,
-        alpha_matting_foreground_threshold=240,
-        alpha_matting_background_threshold=10,
-        alpha_matting_erode_size=10
+        post_process_mask=True
     )
-    return result
 
-def process_base64(b64_str, model_name="u2net_human_seg"):
-    # Strip data URL header if present
+    if cv2 is None:
+        return raw_rgba
+
+    # 2. Convert to NumPy for edge defringing & feathering
+    img_np = np.array(raw_rgba)
+    if img_np.ndim != 3 or img_np.shape[2] != 4:
+        return raw_rgba
+
+    rgb = img_np[:, :, :3]
+    alpha = img_np[:, :, 3]
+
+    # Anti-alias alpha channel with 3x3 Gaussian smoothing
+    alpha_float = alpha.astype(np.float32) / 255.0
+    alpha_smooth = cv2.GaussianBlur(alpha_float, (3, 3), 0)
+    alpha_smooth = np.clip(alpha_smooth, 0.0, 1.0)
+
+    # 3. Photoshop Defringe: inpaint/neutralize color spill on semi-transparent borders
+    # (Removes room/chair color cast on hair strands and shirt shoulders)
+    fringe_mask = (alpha > 8) & (alpha < 235)
+    if np.any(fringe_mask):
+        inpaint_mask = ((alpha <= 220) & (alpha > 0)).astype(np.uint8)
+        clean_rgb = cv2.inpaint(rgb, inpaint_mask, 3, cv2.INPAINT_TELEA)
+    else:
+        clean_rgb = rgb
+
+    out_rgba = np.dstack((clean_rgb, (alpha_smooth * 255).astype(np.uint8)))
+    return Image.fromarray(out_rgba)
+
+def process_base64(b64_str, model_name="isnet-general-use", target_color=None):
     if "," in b64_str:
         b64_str = b64_str.split(",", 1)[1]
     
     img_data = base64.b64decode(b64_str)
     pil_img = Image.open(io.BytesIO(img_data)).convert("RGB")
     
-    # Process
     t0 = time.time()
-    result_img = remove_background_image(pil_img, model_name)
+    result_rgba = refine_photoshop_matting(pil_img, model_name)
     elapsed = time.time() - t0
     
-    # Encode output to PNG base64
-    buf = io.BytesIO()
-    result_img.save(buf, format="PNG", optimize=True)
-    out_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    
+    # Encode transparent PNG
+    buf_png = io.BytesIO()
+    result_rgba.save(buf_png, format="PNG", optimize=True)
+    out_b64 = base64.b64encode(buf_png.getvalue()).decode("ascii")
+
+    # If target background color requested, also generate composite
+    composite_b64 = None
+    if target_color and len(target_color) == 3:
+        bg = Image.new("RGB", result_rgba.size, tuple(target_color))
+        bg.paste(result_rgba, mask=result_rgba.split()[3])
+        buf_comp = io.BytesIO()
+        bg.save(buf_comp, format="JPEG", quality=96)
+        composite_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf_comp.getvalue()).decode('ascii')}"
+
     return {
         "success": True,
         "image": f"data:image/png;base64,{out_b64}",
-        "width": result_img.width,
-        "height": result_img.height,
-        "time_sec": round(elapsed, 3)
+        "composite": composite_b64,
+        "width": result_rgba.width,
+        "height": result_rgba.height,
+        "time_sec": round(elapsed, 3),
+        "model": model_name
     }
 
 def run_server_loop():
-    """
-    Persistent server loop communicating via JSON lines on stdin/stdout.
-    Keeps model loaded in RAM for rapid ~1-2s inference on subsequent requests.
-    """
-    sys.stderr.write("[bg_remove] Studio AI Background Removal Engine started (daemon mode)\n")
+    sys.stderr.write("[bg_remove] Studio AI Background Removal Engine ready (daemon mode)\n")
     sys.stderr.flush()
     
-    # Pre-warm default model
+    # Pre-warm isnet-general-use session
     try:
-        get_session("u2net_human_seg")
-        sys.stderr.write("[bg_remove] Pre-warmed u2net_human_seg model ready\n")
+        get_session("isnet-general-use")
+        sys.stderr.write("[bg_remove] Pre-warmed isnet-general-use model ready\n")
         sys.stderr.flush()
     except Exception as e:
         sys.stderr.write(f"[bg_remove] Pre-warm warning: {e}\n")
@@ -125,8 +162,9 @@ def run_server_loop():
 
             if action == "remove_bg":
                 img_b64 = req.get("image", "")
-                model = req.get("model", "u2net_human_seg")
-                res = process_base64(img_b64, model)
+                model = req.get("model", "isnet-general-use")
+                color = req.get("color", None)
+                res = process_base64(img_b64, model, color)
                 res["id"] = req_id
                 sys.stdout.write(json.dumps(res) + "\n")
                 sys.stdout.flush()
@@ -147,27 +185,27 @@ def main():
             return
         elif sys.argv[1] == "--test":
             print("[bg_remove] Running self-test...")
-            test_img = Image.new("RGB", (320, 240), color=(200, 100, 50))
-            res = remove_background_image(test_img, "u2net_human_seg")
+            test_img = Image.new("RGB", (320, 240), color=(180, 80, 40))
+            res = refine_photoshop_matting(test_img, "isnet-general-use")
             print(f"[bg_remove] Self-test success! Result size: {res.size}, mode: {res.mode}")
             return
         elif sys.argv[1] == "--file" and len(sys.argv) >= 4:
             in_path = sys.argv[2]
             out_path = sys.argv[3]
-            model = sys.argv[4] if len(sys.argv) > 4 else "u2net_human_seg"
+            model = sys.argv[4] if len(sys.argv) > 4 else "isnet-general-use"
             img = Image.open(in_path)
-            res = remove_background_image(img, model)
+            res = refine_photoshop_matting(img, model)
             res.save(out_path)
             print(f"Saved: {out_path}")
             return
 
-    # Default to reading JSON from stdin and writing JSON to stdout
     try:
         raw_input = sys.stdin.read()
         req = json.loads(raw_input)
         img_b64 = req.get("image", "")
-        model = req.get("model", "u2net_human_seg")
-        res = process_base64(img_b64, model)
+        model = req.get("model", "isnet-general-use")
+        color = req.get("color", None)
+        res = process_base64(img_b64, model, color)
         sys.stdout.write(json.dumps(res))
     except Exception as e:
         sys.stdout.write(json.dumps({"success": False, "error": str(e)}))

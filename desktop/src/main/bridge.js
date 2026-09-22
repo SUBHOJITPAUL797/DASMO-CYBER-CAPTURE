@@ -203,6 +203,30 @@ class HardwareDriverBridge extends EventEmitter {
         return false;
     }
 
+    freezeVirtualCamera(imageFilePath) {
+        if (this.bridgeProcess && this.bridgeProcess.stdin && !this.bridgeProcess.stdin.destroyed) {
+            try {
+                this.bridgeProcess.stdin.write(`FREEZE_FILE ${imageFilePath}\n`);
+                return true;
+            } catch (e) {
+                console.warn('[Bridge] Error writing FREEZE_FILE command to virtual cam:', e);
+            }
+        }
+        return false;
+    }
+
+    unfreezeVirtualCamera() {
+        if (this.bridgeProcess && this.bridgeProcess.stdin && !this.bridgeProcess.stdin.destroyed) {
+            try {
+                this.bridgeProcess.stdin.write('UNFREEZE\n');
+                return true;
+            } catch (e) {
+                console.warn('[Bridge] Error writing UNFREEZE command to virtual cam:', e);
+            }
+        }
+        return false;
+    }
+
     startAudioBridge(phoneIp) {
         if (this.audioProcess) {
             this.stopAudioBridge();

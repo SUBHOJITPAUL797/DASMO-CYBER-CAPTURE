@@ -9,7 +9,9 @@ let statusPollInterval = null;
 let streamViewer = null;
 
 let currentCamBgMode = 'raw';
-let currentCamBgColor = { r: 255, g: 255, b: 255, hex: '#FFFFFF' };
+let studioSelectedBgColor = '#ffffff';
+let isVirtualCamFrozen = false;
+let studioTransparentFg = null;
 
 function hexToRgb(hex) {
     const clean = hex.replace('#', '');
@@ -25,74 +27,58 @@ function rgbToHex(r, g, b) {
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
 }
 
-function updateWebcamBgUI(mode, r, g, b, label) {
-    currentCamBgMode = mode;
-    currentCamBgColor = { r, g, b, hex: rgbToHex(r, g, b) };
+function setTargetBgColor(hex, label) {
+    studioSelectedBgColor = hex;
 
     const badge = document.getElementById('badgeWebcamBg');
-    const hudBadge = document.getElementById('hudBgBadge');
-
-    if (mode === 'raw') {
-        if (badge) {
-            badge.innerText = 'RAW CAMERA';
-            badge.style.color = 'var(--green)';
-        }
-        if (hudBadge) {
-            hudBadge.innerText = 'WEBCAM BG: RAW';
-            hudBadge.style.color = 'var(--cyan)';
-            hudBadge.style.background = 'rgba(0, 229, 255, 0.12)';
-            hudBadge.style.borderColor = 'rgba(0, 229, 255, 0.35)';
-        }
-    } else {
-        const text = label || `RGB(${r},${g},${b})`;
-        if (badge) {
-            badge.innerText = text;
-            badge.style.color = '#00e5ff';
-        }
-        if (hudBadge) {
-            hudBadge.innerText = `WEBCAM BG: ${text.toUpperCase()}`;
-            hudBadge.style.color = '#00e676';
-            hudBadge.style.background = 'rgba(0, 230, 118, 0.15)';
-            hudBadge.style.borderColor = 'rgba(0, 230, 118, 0.4)';
-        }
+    if (badge) {
+        badge.innerText = `TARGET: ${label || hex.toUpperCase()}`;
+        badge.style.color = '#00e5ff';
     }
 
     // Update active button state
-    document.querySelectorAll('.bg-mode-btn').forEach(b => b.classList.remove('active'));
-    if (mode === 'raw') {
-        document.getElementById('btnBgRaw')?.classList.add('active');
-    } else if (r === 255 && g === 255 && b === 255) {
+    document.querySelectorAll('.portal-bg-toolbar-actions .bg-mode-btn').forEach(b => {
+        if (!b.classList.contains('btn-capture-studio')) {
+            b.classList.remove('active');
+        }
+    });
+
+    const cleanHex = hex.toLowerCase();
+    if (cleanHex === '#ffffff') {
         document.getElementById('btnBgWhite')?.classList.add('active');
-    } else if (r === 33 && g === 150 && b === 243) {
+    } else if (cleanHex === '#1e88e5' || cleanHex === '#2196f3') {
         document.getElementById('btnBgBlue')?.classList.add('active');
-    } else if (r === 229 && g === 57 && b === 53) {
+    } else if (cleanHex === '#e53935') {
         document.getElementById('btnBgRed')?.classList.add('active');
     }
 
-    // Send IPC to virtual camera driver for DirectShow output
-    window.dasmoAPI?.setVirtualCamBg({ mode, r, g, b });
+    // Also sync color pills in studio modal if user opens modal
+    document.querySelectorAll('.studio-color-pill').forEach(pill => {
+        if ((pill.getAttribute('data-color') || '').toLowerCase() === cleanHex) {
+            pill.classList.add('active');
+        } else {
+            pill.classList.remove('active');
+        }
+    });
 
-    // Update desktop viewfinder stream viewer
-    if (streamViewer) {
-        streamViewer.setBg(mode, currentCamBgColor);
+    // If modal already has a captured studio photo, re-render & re-freeze virtual camera
+    if (studioTransparentFg) {
+        renderStudioCanvas();
+        syncVirtualCamFreeze();
     }
 }
 
 function initWebcamBgControls() {
-    document.getElementById('btnBgRaw')?.addEventListener('click', () => {
-        updateWebcamBgUI('raw', 255, 255, 255, 'RAW CAMERA');
-    });
-
     document.getElementById('btnBgWhite')?.addEventListener('click', () => {
-        updateWebcamBgUI('color', 255, 255, 255, 'WHITE (#FFFFFF)');
+        setTargetBgColor('#ffffff', 'PURE WHITE (GOVT)');
     });
 
     document.getElementById('btnBgBlue')?.addEventListener('click', () => {
-        updateWebcamBgUI('color', 33, 150, 243, 'PASSPORT BLUE');
+        setTargetBgColor('#1e88e5', 'PASSPORT BLUE');
     });
 
     document.getElementById('btnBgRed')?.addEventListener('click', () => {
-        updateWebcamBgUI('color', 229, 57, 53, 'VISA RED');
+        setTargetBgColor('#e53935', 'VISA RED');
     });
 
     const picker = document.getElementById('inputCustomBgColor');
@@ -103,17 +89,87 @@ function initWebcamBgControls() {
 
     document.getElementById('btnApplyCustomBg')?.addEventListener('click', () => {
         const hex = picker ? picker.value : '#00E5FF';
-        const { r, g, b } = hexToRgb(hex);
-        updateWebcamBgUI('color', r, g, b, `CUSTOM (${hex.toUpperCase()})`);
+        setTargetBgColor(hex, `CUSTOM (${hex.toUpperCase()})`);
     });
 }
 
 // ==============================================================================
 // STUDIO AI PHOTO CAPTURE & MATTING CONTROLLER (v1.6.0)
 // High-Resolution Snapshot -> Deep Neural Model -> Studio-Clean Cutout
+// DirectShow Virtual Camera Freeze: Broadcasts Studio Photo to Portals!
 // ==============================================================================
-let studioTransparentFg = null;
-let studioSelectedBgColor = '#ffffff';
+
+function renderStudioCanvas() {
+    const resultCanvas = document.getElementById('studioResultCanvas');
+    if (!studioTransparentFg || !resultCanvas) return;
+    const ctx = resultCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = studioTransparentFg.naturalWidth || studioTransparentFg.width;
+    const h = studioTransparentFg.naturalHeight || studioTransparentFg.height;
+    resultCanvas.width = w;
+    resultCanvas.height = h;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (studioSelectedBgColor !== 'transparent') {
+        ctx.fillStyle = studioSelectedBgColor;
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    ctx.drawImage(studioTransparentFg, 0, 0);
+}
+
+function syncVirtualCamFreeze() {
+    const resultCanvas = document.getElementById('studioResultCanvas');
+    if (!resultCanvas || !studioTransparentFg) return;
+    try {
+        let exportCanvas = resultCanvas;
+        if (studioSelectedBgColor === 'transparent') {
+            exportCanvas = document.createElement('canvas');
+            exportCanvas.width = resultCanvas.width;
+            exportCanvas.height = resultCanvas.height;
+            const eCtx = exportCanvas.getContext('2d');
+            eCtx.fillStyle = '#ffffff';
+            eCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+            eCtx.drawImage(resultCanvas, 0, 0);
+        }
+        const dataUrl = exportCanvas.toDataURL('image/jpeg', 0.95);
+        window.dasmoAPI?.freezeVirtualCamera(dataUrl);
+        isVirtualCamFrozen = true;
+
+        const banner = document.getElementById('studioVirtualCamBanner');
+        const resumeBtn = document.getElementById('btnResumeLiveCam');
+        if (banner) {
+            banner.style.display = 'flex';
+            const label = banner.querySelector('span');
+            if (label) label.innerText = '📡 DASMO CAMERA: STREAMING THIS PHOTO';
+        }
+        if (resumeBtn) {
+            resumeBtn.innerText = '▶ Unfreeze';
+            resumeBtn.style.borderColor = 'var(--cyan)';
+            resumeBtn.style.color = 'var(--cyan)';
+        }
+    } catch (e) {
+        console.warn('[Studio] Virtual camera freeze error:', e);
+    }
+}
+
+function unfreezeVirtualCam() {
+    window.dasmoAPI?.unfreezeVirtualCamera();
+    isVirtualCamFrozen = false;
+    const banner = document.getElementById('studioVirtualCamBanner');
+    const resumeBtn = document.getElementById('btnResumeLiveCam');
+    if (banner) {
+        const label = banner.querySelector('span');
+        if (label) label.innerText = '📷 DASMO CAMERA: LIVE FEED RESUMED';
+    }
+    if (resumeBtn) {
+        resumeBtn.innerText = '⏸ Freeze';
+        resumeBtn.style.borderColor = 'var(--green)';
+        resumeBtn.style.color = 'var(--green)';
+    }
+}
 
 function initStudioCapture() {
     const btnStudioCapture = document.getElementById('btnStudioCapture');
@@ -122,7 +178,6 @@ function initStudioCapture() {
     const btnClose = document.getElementById('btnCloseStudioModal');
     const loadingOverlay = document.getElementById('studioLoadingOverlay');
     const resultCanvas = document.getElementById('studioResultCanvas');
-    const ctx = resultCanvas?.getContext('2d');
     const modelSelect = document.getElementById('selectStudioModel');
     const statusEl = document.getElementById('studioModalStatus');
 
@@ -130,28 +185,12 @@ function initStudioCapture() {
     const customColorInput = document.getElementById('studioCustomColorInput');
     const customHexLabel = document.getElementById('studioCustomHex');
     const btnApplyCustomColor = document.getElementById('btnApplyStudioCustomColor');
+    const btnResumeLiveCam = document.getElementById('btnResumeLiveCam');
 
     const btnCopy = document.getElementById('btnCopyStudioImage');
     const btnSaveJpg = document.getElementById('btnSaveStudioJpg');
     const btnSavePng = document.getElementById('btnSaveStudioPng');
     const btnRetake = document.getElementById('btnRetakeStudioPhoto');
-
-    function renderStudioCanvas() {
-        if (!studioTransparentFg || !resultCanvas || !ctx) return;
-        const w = studioTransparentFg.naturalWidth || studioTransparentFg.width;
-        const h = studioTransparentFg.naturalHeight || studioTransparentFg.height;
-        resultCanvas.width = w;
-        resultCanvas.height = h;
-
-        ctx.clearRect(0, 0, w, h);
-
-        if (studioSelectedBgColor !== 'transparent') {
-            ctx.fillStyle = studioSelectedBgColor;
-            ctx.fillRect(0, 0, w, h);
-        }
-
-        ctx.drawImage(studioTransparentFg, 0, 0);
-    }
 
     async function triggerCapture() {
         const frameDataUrl = streamViewer ? streamViewer.getLatestFrameDataUrl() : null;
@@ -163,11 +202,11 @@ function initStudioCapture() {
         if (modal) modal.style.display = 'flex';
         if (loadingOverlay) loadingOverlay.style.display = 'flex';
         if (statusEl) {
-            statusEl.innerText = 'AI STUDIO MATTING IN PROGRESS...';
+            statusEl.innerText = '🎨 DEEP AI PORTRAIT MATTING IN PROGRESS... (~2-3 sec)';
             statusEl.style.color = '#00e5ff';
         }
 
-        const model = modelSelect ? modelSelect.value : 'u2net_human_seg';
+        const model = modelSelect ? modelSelect.value : 'isnet-general-use';
 
         try {
             const res = await window.dasmoAPI.removeBackground({
@@ -181,10 +220,11 @@ function initStudioCapture() {
                     studioTransparentFg = img;
                     if (loadingOverlay) loadingOverlay.style.display = 'none';
                     if (statusEl) {
-                        statusEl.innerText = `STUDIO MATTING COMPLETE (${res.time_sec}s · ${res.width}×${res.height})`;
+                        statusEl.innerText = `✓ STUDIO MATTING COMPLETE (${res.time_sec}s · ${res.width}×${res.height})`;
                         statusEl.style.color = '#00e676';
                     }
                     renderStudioCanvas();
+                    syncVirtualCamFreeze();
                 };
                 img.src = res.image;
             } else {
@@ -208,15 +248,27 @@ function initStudioCapture() {
     btnStudioCapture?.addEventListener('click', triggerCapture);
     btnSnapshot?.addEventListener('click', triggerCapture);
 
+    btnResumeLiveCam?.addEventListener('click', () => {
+        if (isVirtualCamFrozen) {
+            unfreezeVirtualCam();
+        } else {
+            syncVirtualCamFreeze();
+        }
+    });
+
     btnClose?.addEventListener('click', () => {
+        unfreezeVirtualCam();
         if (modal) modal.style.display = 'none';
     });
 
-    btnRetake?.addEventListener('click', triggerCapture);
+    btnRetake?.addEventListener('click', () => {
+        triggerCapture();
+    });
 
     // ESC key closes modal
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && modal && modal.style.display !== 'none') {
+            unfreezeVirtualCam();
             modal.style.display = 'none';
         }
     });
@@ -228,6 +280,7 @@ function initStudioCapture() {
             pill.classList.add('active');
             studioSelectedBgColor = pill.getAttribute('data-color') || '#ffffff';
             renderStudioCanvas();
+            syncVirtualCamFreeze();
         });
     });
 
@@ -242,6 +295,7 @@ function initStudioCapture() {
         colorPills.forEach(p => p.classList.remove('active'));
         studioSelectedBgColor = customColorInput ? customColorInput.value : '#00e5ff';
         renderStudioCanvas();
+        syncVirtualCamFreeze();
     });
 
     // Model selection change
@@ -1305,43 +1359,12 @@ class UltraLowLatencyStreamViewer {
         this.lastFpsMeasure = Date.now();
         this.measuredFps = 0;
 
-        // AI Background Replacement (Webcam Portal Photo Mode)
+        // Video Stream Display Mode: Always Pure Raw 60 FPS Camera Feed
         this.bgMode = 'raw';
-        this.bgColor = { r: 255, g: 255, b: 255, hex: '#FFFFFF' };
-        this.segmenter = null;
-        this.segmentationReady = false;
-        this.isSegmenting = false;
-        this.latestMask = null;
-        this.offCanvas = null;
-        this.offCtx = null;
-        this._initSegmenter();
-    }
-
-    _initSegmenter() {
-        if (typeof SelfieSegmentation !== 'undefined') {
-            try {
-                this.segmenter = new SelfieSegmentation({
-                    locateFile: (file) => `vendor/mediapipe/${file}`
-                });
-                this.segmenter.setOptions({
-                    modelSelection: 0,
-                    selfieMode: false
-                });
-                this.segmenter.onResults((results) => {
-                    this.latestMask = results.segmentationMask;
-                    this.isSegmenting = false;
-                });
-                this.segmentationReady = true;
-                console.log('[StreamViewer] MediaPipe Selfie Segmentation initialized locally.');
-            } catch (e) {
-                console.warn('[StreamViewer] MediaPipe initialization error:', e);
-            }
-        }
     }
 
     setBg(mode, color) {
-        this.bgMode = mode;
-        if (color) this.bgColor = color;
+        this.bgMode = 'raw';
     }
 
     start(device) {
@@ -1534,50 +1557,8 @@ class UltraLowLatencyStreamViewer {
                     const rawCtx = this.latestRawCanvas.getContext('2d');
                     rawCtx.drawImage(bitmap, 0, 0);
 
-                    if (this.bgMode === 'color' && this.segmentationReady) {
-                        if (!this.isSegmenting && this.segmenter) {
-                            if (!this.inputCanvas) {
-                                this.inputCanvas = document.createElement('canvas');
-                                this.inputCanvas.width = 256;
-                                this.inputCanvas.height = 256;
-                                this.inputCtx = this.inputCanvas.getContext('2d');
-                            }
-                            this.inputCtx.drawImage(bitmap, 0, 0, 256, 256);
-                            this.isSegmenting = true;
-                            this.segmenter.send({ image: this.inputCanvas }).catch(() => { this.isSegmenting = false; });
-                        }
-
-                        if (this.latestMask) {
-                            if (!this.offCanvas) {
-                                this.offCanvas = document.createElement('canvas');
-                                this.offCtx = this.offCanvas.getContext('2d');
-                            }
-                            if (this.offCanvas.width !== bitmap.width || this.offCanvas.height !== bitmap.height) {
-                                this.offCanvas.width = bitmap.width;
-                                this.offCanvas.height = bitmap.height;
-                            }
-
-                            // 1. Draw solid background color (e.g. #FFFFFF for portal)
-                            this.ctx.fillStyle = this.bgColor.hex || '#FFFFFF';
-                            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-                            // 2. Offscreen composite person with high-quality smoothing
-                            this.offCtx.clearRect(0, 0, bitmap.width, bitmap.height);
-                            this.offCtx.imageSmoothingEnabled = true;
-                            this.offCtx.imageSmoothingQuality = 'high';
-                            this.offCtx.drawImage(this.latestMask, 0, 0, bitmap.width, bitmap.height);
-                            this.offCtx.globalCompositeOperation = 'source-in';
-                            this.offCtx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
-                            this.offCtx.globalCompositeOperation = 'source-over';
-
-                            // 3. Draw person onto the background canvas
-                            this.ctx.drawImage(this.offCanvas, 0, 0);
-                        } else {
-                            this.ctx.drawImage(bitmap, 0, 0);
-                        }
-                    } else {
-                        this.ctx.drawImage(bitmap, 0, 0);
-                    }
+                    // Live Viewfinder: Pure 60 FPS Raw Camera Feed
+                    this.ctx.drawImage(bitmap, 0, 0);
                     if (this.renderCount === 0) {
                         this._showCanvas();
                     }

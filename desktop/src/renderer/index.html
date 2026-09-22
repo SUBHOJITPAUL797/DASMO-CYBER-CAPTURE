@@ -129,23 +129,21 @@
                 <!-- Portal Live Photo AI Background Toolbar -->
                 <div class="portal-bg-toolbar" id="portalBgToolbar">
                     <div class="portal-bg-toolbar-title">
-                        <span style="font-size: 18px;">🎯</span>
+                        <span style="font-size: 20px;">🎯</span>
                         <div style="display: flex; flex-direction: column;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-weight: 700; color: #fff; font-size: 12px; letter-spacing: 0.5px;">GOVERNMENT PORTAL LIVE PHOTO · AI BACKGROUND</span>
-                                <span style="font-size: 9px; color: var(--green); font-family: var(--font-mono); font-weight: 700;" id="badgeWebcamBg">RAW CAMERA</span>
+                                <span style="font-weight: 800; color: #fff; font-size: 13px; letter-spacing: 0.5px;">STUDIO AI PORTAL PHOTO · BACKGROUND REMOVER</span>
+                                <span style="font-size: 9px; color: var(--green); font-family: var(--font-mono); font-weight: 700; background: rgba(0, 230, 118, 0.15); border: 1px solid rgba(0, 230, 118, 0.4); padding: 1px 6px; border-radius: 4px;" id="badgeWebcamBg">LIVE FEED: CRISP RAW</span>
                             </div>
-                            <span style="font-size: 10px; color: var(--text-secondary);">DirectShow DASMO CAMERA streams selected solid background to SSC, UPSC, NTA, Passport, KYC portals</span>
+                            <span style="font-size: 10px; color: var(--text-secondary);">Position candidate in live view → Click button → Deep AI removes BG with Photoshop-clean edges</span>
                         </div>
                     </div>
                     <div class="portal-bg-toolbar-actions">
-                        <button class="bg-mode-btn active" id="btnBgRaw" data-mode="raw">
-                            📷 Raw
-                        </button>
-                        <button class="bg-mode-btn glow-white" id="btnBgWhite" data-mode="color" data-r="255" data-g="255" data-b="255" style="background: #ffffff; color: #000; font-weight: 800; border-color: #fff;">
+                        <span style="font-size: 10px; font-family: var(--font-mono); color: var(--text-muted);">TARGET BG:</span>
+                        <button class="bg-mode-btn glow-white active" id="btnBgWhite" data-mode="color" data-r="255" data-g="255" data-b="255" style="background: #ffffff; color: #000; font-weight: 800; border-color: #fff;">
                             ⚪ Pure White (SSC/Govt)
                         </button>
-                        <button class="bg-mode-btn" id="btnBgBlue" data-mode="color" data-r="33" data-g="150" data-b="243" style="background: #1e88e5; color: #fff; font-weight: 700;">
+                        <button class="bg-mode-btn" id="btnBgBlue" data-mode="color" data-r="30" data-g="136" data-b="229" style="background: #1e88e5; color: #fff; font-weight: 700;">
                             🔵 Blue
                         </button>
                         <button class="bg-mode-btn" id="btnBgRed" data-mode="color" data-r="229" data-g="57" data-b="53" style="background: #e53935; color: #fff; font-weight: 700;">
@@ -158,8 +156,8 @@
                                 🎨 Custom
                             </button>
                         </div>
-                        <button class="bg-mode-btn btn-capture-studio" id="btnStudioCapture" style="background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000; font-weight: 800; border-color: #00e5ff; box-shadow: 0 0 14px rgba(0, 229, 255, 0.45); margin-left: 6px; padding: 6px 14px; gap: 6px;">
-                            <span>📸</span> <span>Capture & Studio Remove BG</span>
+                        <button class="bg-mode-btn btn-capture-studio" id="btnStudioCapture" style="background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000; font-weight: 800; border-color: #00e5ff; box-shadow: 0 0 16px rgba(0, 229, 255, 0.5); padding: 8px 16px; font-size: 12px; gap: 6px;">
+                            <span>📸</span> <span>TAKE STUDIO PHOTO & REMOVE BG</span>
                         </button>
                     </div>
                 </div>
@@ -429,14 +427,19 @@
 
                     <div class="sidebar-section-title" style="margin-top: 14px;">AI MODEL SELECTION</div>
                     <select id="selectStudioModel" class="hud-select" style="width: 100%; padding: 6px; background: rgba(8,12,20,0.8); color: #fff; border: 1px solid var(--border); border-radius: 6px; font-size: 11px;">
-                        <option value="u2net_human_seg" selected>👤 Portrait Specialist (u2net_human_seg) - Best</option>
-                        <option value="silueta">⚡ Fast Ultra-Light (silueta)</option>
-                        <option value="isnet-general-use">🔬 Ultra Deep (isnet-general-use)</option>
+                        <option value="isnet-general-use" selected>🔬 Deep Studio AI (IS-Net 1024px) - Best</option>
+                        <option value="birefnet-portrait">👤 BiRefNet Portrait Master (Ultra)</option>
+                        <option value="silueta">⚡ Fast Light (Silueta)</option>
                         <option value="u2netp">🚀 Instant Micro (u2netp)</option>
                     </select>
 
-                    <div class="sidebar-section-title" style="margin-top: 14px;">EXPORT ACTIONS</div>
+                    <div class="sidebar-section-title" style="margin-top: 14px;">PORTAL & EXPORT ACTIONS</div>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div id="studioVirtualCamBanner" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 230, 118, 0.12); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 6px; padding: 6px 10px; font-size: 10px; font-family: var(--font-mono); color: var(--green);">
+                            <span>📡 DASMO CAMERA: STREAMING THIS PHOTO</span>
+                            <button class="hud-btn" id="btnResumeLiveCam" style="padding: 2px 8px; font-size: 10px; border-color: var(--cyan); color: var(--cyan);">▶ Unfreeze</button>
+                        </div>
+
                         <button class="hud-btn btn-action-copy" id="btnCopyStudioImage" style="justify-content: center; background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000; font-weight: 800; padding: 10px 14px; font-size: 12px; box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);">
                             📋 Copy Image (Ready to Paste)
                         </button>

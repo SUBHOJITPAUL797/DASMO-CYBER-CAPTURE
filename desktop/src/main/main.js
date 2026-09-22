@@ -403,6 +403,26 @@ ipcMain.handle('driver:set-cam-bg', (event, { mode, r, g, b }) => {
     return driverBridge?.setVirtualCamBg(mode, r, g, b);
 });
 
+ipcMain.handle('driver:freeze-cam', (event, imageBase64OrPath) => {
+    try {
+        let filePath = imageBase64OrPath;
+        if (typeof imageBase64OrPath === 'string' && imageBase64OrPath.startsWith('data:image')) {
+            const base64Data = imageBase64OrPath.replace(/^data:image\/\w+;base64,/, '');
+            const tempPath = path.join(app.getPath('temp'), 'dasmo_frozen_photo.jpg');
+            fs.writeFileSync(tempPath, Buffer.from(base64Data, 'base64'));
+            filePath = tempPath;
+        }
+        return driverBridge?.freezeVirtualCamera(filePath);
+    } catch (e) {
+        console.error('[driver:freeze-cam error]', e);
+        return false;
+    }
+});
+
+ipcMain.handle('driver:unfreeze-cam', () => {
+    return driverBridge?.unfreezeVirtualCamera();
+});
+
 ipcMain.handle('driver:start-audio-bridge', (event, phoneIp) => {
     driverBridge.startAudioBridge(phoneIp);
     return true;
@@ -473,7 +493,7 @@ ipcMain.handle('capture:remove-bg', async (event, { image, model }) => {
         if (!bgManager) {
             bgManager = new BackgroundRemovalManager();
         }
-        return await bgManager.removeBackground(image, model || 'u2net_human_seg');
+        return await bgManager.removeBackground(image, model || 'isnet-general-use');
     } catch (err) {
         console.error('[IPC capture:remove-bg error]', err);
         return { success: false, error: err.message };
