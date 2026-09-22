@@ -108,6 +108,217 @@ function initWebcamBgControls() {
     });
 }
 
+// ==============================================================================
+// STUDIO AI PHOTO CAPTURE & MATTING CONTROLLER (v1.6.0)
+// High-Resolution Snapshot -> Deep Neural Model -> Studio-Clean Cutout
+// ==============================================================================
+let studioTransparentFg = null;
+let studioSelectedBgColor = '#ffffff';
+
+function initStudioCapture() {
+    const btnStudioCapture = document.getElementById('btnStudioCapture');
+    const btnSnapshot = document.getElementById('btnSnapshot');
+    const modal = document.getElementById('studioCaptureModal');
+    const btnClose = document.getElementById('btnCloseStudioModal');
+    const loadingOverlay = document.getElementById('studioLoadingOverlay');
+    const resultCanvas = document.getElementById('studioResultCanvas');
+    const ctx = resultCanvas?.getContext('2d');
+    const modelSelect = document.getElementById('selectStudioModel');
+    const statusEl = document.getElementById('studioModalStatus');
+
+    const colorPills = document.querySelectorAll('.studio-color-pill');
+    const customColorInput = document.getElementById('studioCustomColorInput');
+    const customHexLabel = document.getElementById('studioCustomHex');
+    const btnApplyCustomColor = document.getElementById('btnApplyStudioCustomColor');
+
+    const btnCopy = document.getElementById('btnCopyStudioImage');
+    const btnSaveJpg = document.getElementById('btnSaveStudioJpg');
+    const btnSavePng = document.getElementById('btnSaveStudioPng');
+    const btnRetake = document.getElementById('btnRetakeStudioPhoto');
+
+    function renderStudioCanvas() {
+        if (!studioTransparentFg || !resultCanvas || !ctx) return;
+        const w = studioTransparentFg.naturalWidth || studioTransparentFg.width;
+        const h = studioTransparentFg.naturalHeight || studioTransparentFg.height;
+        resultCanvas.width = w;
+        resultCanvas.height = h;
+
+        ctx.clearRect(0, 0, w, h);
+
+        if (studioSelectedBgColor !== 'transparent') {
+            ctx.fillStyle = studioSelectedBgColor;
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        ctx.drawImage(studioTransparentFg, 0, 0);
+    }
+
+    async function triggerCapture() {
+        const frameDataUrl = streamViewer ? streamViewer.getLatestFrameDataUrl() : null;
+        if (!frameDataUrl) {
+            alert('No camera feed active yet. Please connect your phone via Air Link first.');
+            return;
+        }
+
+        if (modal) modal.style.display = 'flex';
+        if (loadingOverlay) loadingOverlay.style.display = 'flex';
+        if (statusEl) {
+            statusEl.innerText = 'AI STUDIO MATTING IN PROGRESS...';
+            statusEl.style.color = '#00e5ff';
+        }
+
+        const model = modelSelect ? modelSelect.value : 'u2net_human_seg';
+
+        try {
+            const res = await window.dasmoAPI.removeBackground({
+                image: frameDataUrl,
+                model: model
+            });
+
+            if (res && res.success && res.image) {
+                const img = new Image();
+                img.onload = () => {
+                    studioTransparentFg = img;
+                    if (loadingOverlay) loadingOverlay.style.display = 'none';
+                    if (statusEl) {
+                        statusEl.innerText = `STUDIO MATTING COMPLETE (${res.time_sec}s · ${res.width}×${res.height})`;
+                        statusEl.style.color = '#00e676';
+                    }
+                    renderStudioCanvas();
+                };
+                img.src = res.image;
+            } else {
+                if (loadingOverlay) loadingOverlay.style.display = 'none';
+                if (statusEl) {
+                    statusEl.innerText = 'PROCESSING ERROR';
+                    statusEl.style.color = 'var(--red)';
+                }
+                alert('Background removal failed: ' + (res?.error || 'Unknown error'));
+            }
+        } catch (err) {
+            if (loadingOverlay) loadingOverlay.style.display = 'none';
+            if (statusEl) {
+                statusEl.innerText = 'ERROR';
+                statusEl.style.color = 'var(--red)';
+            }
+            alert('Error running AI background removal: ' + err.message);
+        }
+    }
+
+    btnStudioCapture?.addEventListener('click', triggerCapture);
+    btnSnapshot?.addEventListener('click', triggerCapture);
+
+    btnClose?.addEventListener('click', () => {
+        if (modal) modal.style.display = 'none';
+    });
+
+    btnRetake?.addEventListener('click', triggerCapture);
+
+    // ESC key closes modal
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal && modal.style.display !== 'none') {
+            modal.style.display = 'none';
+        }
+    });
+
+    // Background color pills
+    colorPills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            colorPills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            studioSelectedBgColor = pill.getAttribute('data-color') || '#ffffff';
+            renderStudioCanvas();
+        });
+    });
+
+    // Custom color input
+    if (customColorInput) {
+        customColorInput.addEventListener('input', (e) => {
+            if (customHexLabel) customHexLabel.innerText = e.target.value.toUpperCase();
+        });
+    }
+
+    btnApplyCustomColor?.addEventListener('click', () => {
+        colorPills.forEach(p => p.classList.remove('active'));
+        studioSelectedBgColor = customColorInput ? customColorInput.value : '#00e5ff';
+        renderStudioCanvas();
+    });
+
+    // Model selection change
+    modelSelect?.addEventListener('change', () => {
+        if (modal && modal.style.display !== 'none' && studioTransparentFg) {
+            triggerCapture();
+        }
+    });
+
+    // Copy to clipboard
+    btnCopy?.addEventListener('click', async () => {
+        if (!resultCanvas) return;
+        const dataUrl = resultCanvas.toDataURL('image/png');
+        try {
+            const res = await window.dasmoAPI.copyImageToClipboard(dataUrl);
+            if (res && res.success) {
+                const origHtml = btnCopy.innerHTML;
+                btnCopy.innerHTML = '<span>✓ Copied! Ready to Paste (Ctrl+V)</span>';
+                btnCopy.style.background = '#00e676';
+                btnCopy.style.color = '#000';
+                setTimeout(() => {
+                    btnCopy.innerHTML = origHtml;
+                    btnCopy.style.background = 'linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%)';
+                    btnCopy.style.color = '#000';
+                }, 2500);
+            } else {
+                alert('Could not copy image: ' + (res?.error || 'Unknown'));
+            }
+        } catch (e) {
+            alert('Copy error: ' + e.message);
+        }
+    });
+
+    // Save JPG
+    btnSaveJpg?.addEventListener('click', async () => {
+        if (!resultCanvas) return;
+        let dataUrl;
+        if (studioSelectedBgColor === 'transparent') {
+            const off = document.createElement('canvas');
+            off.width = resultCanvas.width;
+            off.height = resultCanvas.height;
+            const offCtx = off.getContext('2d');
+            offCtx.fillStyle = '#ffffff';
+            offCtx.fillRect(0, 0, off.width, off.height);
+            offCtx.drawImage(resultCanvas, 0, 0);
+            dataUrl = off.toDataURL('image/jpeg', 0.95);
+        } else {
+            dataUrl = resultCanvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        const res = await window.dasmoAPI.saveImageToFile({
+            dataUrl,
+            defaultName: `DASMO_STUDIO_PHOTO_${Date.now()}.jpg`
+        });
+        if (res && res.success) {
+            const orig = btnSaveJpg.innerText;
+            btnSaveJpg.innerText = '✓ Saved JPG!';
+            setTimeout(() => { btnSaveJpg.innerText = orig; }, 2000);
+        }
+    });
+
+    // Save PNG
+    btnSavePng?.addEventListener('click', async () => {
+        if (!resultCanvas) return;
+        const dataUrl = resultCanvas.toDataURL('image/png');
+        const res = await window.dasmoAPI.saveImageToFile({
+            dataUrl,
+            defaultName: `DASMO_STUDIO_PHOTO_${Date.now()}.png`
+        });
+        if (res && res.success) {
+            const orig = btnSavePng.innerText;
+            btnSavePng.innerText = '✓ Saved PNG!';
+            setTimeout(() => { btnSavePng.innerText = orig; }, 2000);
+        }
+    });
+}
+
 function updateAudioRelayUI(running) {
     isAudioRelayRunning = running;
     const btn = document.getElementById('btnStartAudioRelay');
@@ -137,6 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initDeviceDiscovery();
     initHardwareControls();
     initWebcamBgControls();
+    initStudioCapture();
     initSettings();
     checkDriverEnv();
 
@@ -1311,6 +1523,17 @@ class UltraLowLatencyStreamViewer {
                         this.canvas.height = bitmap.height;
                     }
 
+                    // Always save pristine raw camera frame for studio photo capture
+                    if (!this.latestRawCanvas) {
+                        this.latestRawCanvas = document.createElement('canvas');
+                    }
+                    if (this.latestRawCanvas.width !== bitmap.width || this.latestRawCanvas.height !== bitmap.height) {
+                        this.latestRawCanvas.width = bitmap.width;
+                        this.latestRawCanvas.height = bitmap.height;
+                    }
+                    const rawCtx = this.latestRawCanvas.getContext('2d');
+                    rawCtx.drawImage(bitmap, 0, 0);
+
                     if (this.bgMode === 'color' && this.segmentationReady) {
                         if (!this.isSegmenting && this.segmenter) {
                             if (!this.inputCanvas) {
@@ -1410,5 +1633,24 @@ class UltraLowLatencyStreamViewer {
             this.img.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'><rect width='640' height='360' fill='%23080c14'/><text x='50%25' y='50%25' font-family='monospace' font-size='14' fill='%2300e5ff' text-anchor='middle' dominant-baseline='middle'>[ DASMO CYBER CAPTURE // WAITING FOR AIR LINK FEED ]</text></svg>";
         }
     }
+
+    getLatestFrameDataUrl() {
+        if (this.latestRawCanvas && this.latestRawCanvas.width > 0 && this.latestRawCanvas.height > 0) {
+            return this.latestRawCanvas.toDataURL('image/jpeg', 0.95);
+        }
+        if (this.canvas && this.canvas.width > 0 && this.canvas.height > 0) {
+            return this.canvas.toDataURL('image/jpeg', 0.95);
+        }
+        if (this.img && this.img.complete && this.img.naturalWidth > 0) {
+            const off = document.createElement('canvas');
+            off.width = this.img.naturalWidth;
+            off.height = this.img.naturalHeight;
+            const ctx = off.getContext('2d');
+            ctx.drawImage(this.img, 0, 0);
+            return off.toDataURL('image/jpeg', 0.95);
+        }
+        return null;
+    }
 }
+
 

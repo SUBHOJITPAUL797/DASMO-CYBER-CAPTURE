@@ -60,6 +60,12 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
     getAppVersion: () => ipcRenderer.invoke('app:get-version'),
 
+    // Studio AI Photo Background Removal & Matting
+    removeBackground: (params) => ipcRenderer.invoke('capture:remove-bg', params),
+    copyImageToClipboard: (dataUrl) => ipcRenderer.invoke('capture:copy-image', dataUrl),
+    saveImageToFile: (params) => ipcRenderer.invoke('capture:save-image', params),
+
     // External URLs
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)
 });
+

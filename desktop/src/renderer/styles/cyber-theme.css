@@ -670,3 +670,144 @@ input[type="range"] {
     padding: 2px 6px;
 }
 
+/* Studio AI Capture & Matting Modal */
+.studio-modal-card {
+    width: 860px;
+    max-width: 95vw;
+    background: #0b111e;
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 229, 255, 0.15);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+}
+
+.studio-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.studio-modal-body {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    min-height: 440px;
+    background: #080c14;
+}
+
+.studio-preview-container {
+    flex: 1;
+    min-height: 380px;
+    background: #050810;
+    /* Checkered pattern for transparency preview */
+    background-image: 
+        linear-gradient(45deg, #101624 25%, transparent 25%), 
+        linear-gradient(-45deg, #101624 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #101624 75%), 
+        linear-gradient(-45deg, transparent 75%, #101624 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+#studioResultCanvas {
+    max-width: 100%;
+    max-height: 420px;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.studio-loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 12, 20, 0.88);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.studio-spinner {
+    width: 46px;
+    height: 46px;
+    border: 3px solid rgba(0, 229, 255, 0.2);
+    border-top-color: #00e5ff;
+    border-radius: 50%;
+    animation: studioSpin 0.8s linear infinite;
+}
+
+@keyframes studioSpin {
+    to { transform: rotate(360deg); }
+}
+
+.studio-controls-sidebar {
+    width: 290px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 0.8px;
+    font-family: var(--font-mono);
+    margin-bottom: 4px;
+}
+
+.studio-bg-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.studio-color-pill {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 11px;
+    text-align: left;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.studio-color-pill:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.studio-color-pill.active {
+    outline: 2px solid #00e5ff;
+    outline-offset: 1px;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.btn-capture-studio {
+    animation: pulseCyanGlow 2.5s infinite;
+}
+
+@keyframes pulseCyanGlow {
+    0%, 100% { box-shadow: 0 0 12px rgba(0, 229, 255, 0.4); }
+    50% { box-shadow: 0 0 22px rgba(0, 229, 255, 0.8); }
+}
+
+

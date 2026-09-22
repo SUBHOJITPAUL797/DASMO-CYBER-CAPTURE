@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, clipboard, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { NetworkDiscoveryEngine } = require('./discovery');
 const { HardwareDriverBridge, getDriverScriptPath } = require('./bridge');
+const { BackgroundRemovalManager } = require('./bg_manager');
 const { checkForDesktopUpdates } = require('./updater');
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -16,7 +17,9 @@ let popoutWindow = null;
 let tray = null;
 let discoveryEngine = null;
 let driverBridge = null;
+let bgManager = null;
 let activeConnectedDevice = null;
+
 
 function createMainWindow() {
     mainWindow = new BrowserWindow({
@@ -257,6 +260,11 @@ function sendPhoneControl(action, value = '') {
 app.whenReady().then(() => {
     discoveryEngine = new NetworkDiscoveryEngine();
     driverBridge = new HardwareDriverBridge();
+    bgManager = new BackgroundRemovalManager();
+    // Warm up AI background removal worker in background
+    setTimeout(() => {
+        bgManager?.startWorker();
+    }, 2000);
 
     createMainWindow();
     createTray();
@@ -291,6 +299,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
     app.isQuitting = true;
     try {
+        bgManager?.stopWorker();
         driverBridge?.stopVirtualCamera();
         driverBridge?.stopAudioBridge();
         discoveryEngine?.stopDiscovery();
@@ -457,3 +466,53 @@ ipcMain.handle('app:get-version', () => {
 ipcMain.handle('shell:open-external', (event, url) => {
     shell.openExternal(url);
 });
+
+// Studio AI Photo Background Removal & Matting Handlers
+ipcMain.handle('capture:remove-bg', async (event, { image, model }) => {
+    try {
+        if (!bgManager) {
+            bgManager = new BackgroundRemovalManager();
+        }
+        return await bgManager.removeBackground(image, model || 'u2net_human_seg');
+    } catch (err) {
+        console.error('[IPC capture:remove-bg error]', err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('capture:copy-image', (event, dataUrl) => {
+    try {
+        const img = nativeImage.createFromDataURL(dataUrl);
+        clipboard.writeImage(img);
+        return { success: true };
+    } catch (err) {
+        console.error('[IPC capture:copy-image error]', err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('capture:save-image', async (event, { dataUrl, defaultName }) => {
+    try {
+        const ext = (defaultName && defaultName.toLowerCase().endsWith('.jpg')) ? 'jpg' : 'png';
+        const defaultPath = path.join(app.getPath('desktop'), defaultName || `DASMO_STUDIO_CAPTURE_${Date.now()}.${ext}`);
+        const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+            title: 'Save Studio Live Photo',
+            defaultPath: defaultPath,
+            filters: [
+                { name: 'PNG Image (*.png)', extensions: ['png'] },
+                { name: 'JPEG Image (*.jpg)', extensions: ['jpg', 'jpeg'] }
+            ]
+        });
+
+        if (canceled || !filePath) return { success: false, canceled: true };
+
+        const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        fs.writeFileSync(filePath, buffer);
+        return { success: true, filePath };
+    } catch (err) {
+        console.error('[IPC capture:save-image error]', err);
+        return { success: false, error: err.message };
+    }
+});
+
