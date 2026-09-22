@@ -8,6 +8,106 @@ let isAudioRelayRunning = false;
 let statusPollInterval = null;
 let streamViewer = null;
 
+let currentCamBgMode = 'raw';
+let currentCamBgColor = { r: 255, g: 255, b: 255, hex: '#FFFFFF' };
+
+function hexToRgb(hex) {
+    const clean = hex.replace('#', '');
+    const num = parseInt(clean, 16);
+    return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+    };
+}
+
+function rgbToHex(r, g, b) {
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+}
+
+function updateWebcamBgUI(mode, r, g, b, label) {
+    currentCamBgMode = mode;
+    currentCamBgColor = { r, g, b, hex: rgbToHex(r, g, b) };
+
+    const badge = document.getElementById('badgeWebcamBg');
+    const hudBadge = document.getElementById('hudBgBadge');
+
+    if (mode === 'raw') {
+        if (badge) {
+            badge.innerText = 'RAW CAMERA';
+            badge.style.color = 'var(--green)';
+        }
+        if (hudBadge) {
+            hudBadge.innerText = 'WEBCAM BG: RAW';
+            hudBadge.style.color = 'var(--cyan)';
+            hudBadge.style.background = 'rgba(0, 229, 255, 0.12)';
+            hudBadge.style.borderColor = 'rgba(0, 229, 255, 0.35)';
+        }
+    } else {
+        const text = label || `RGB(${r},${g},${b})`;
+        if (badge) {
+            badge.innerText = text;
+            badge.style.color = '#00e5ff';
+        }
+        if (hudBadge) {
+            hudBadge.innerText = `WEBCAM BG: ${text.toUpperCase()}`;
+            hudBadge.style.color = '#00e676';
+            hudBadge.style.background = 'rgba(0, 230, 118, 0.15)';
+            hudBadge.style.borderColor = 'rgba(0, 230, 118, 0.4)';
+        }
+    }
+
+    // Update active button state
+    document.querySelectorAll('.bg-mode-btn').forEach(b => b.classList.remove('active'));
+    if (mode === 'raw') {
+        document.getElementById('btnBgRaw')?.classList.add('active');
+    } else if (r === 255 && g === 255 && b === 255) {
+        document.getElementById('btnBgWhite')?.classList.add('active');
+    } else if (r === 33 && g === 150 && b === 243) {
+        document.getElementById('btnBgBlue')?.classList.add('active');
+    } else if (r === 229 && g === 57 && b === 53) {
+        document.getElementById('btnBgRed')?.classList.add('active');
+    }
+
+    // Send IPC to virtual camera driver for DirectShow output
+    window.dasmoAPI?.setVirtualCamBg({ mode, r, g, b });
+
+    // Update desktop viewfinder stream viewer
+    if (streamViewer) {
+        streamViewer.setBg(mode, currentCamBgColor);
+    }
+}
+
+function initWebcamBgControls() {
+    document.getElementById('btnBgRaw')?.addEventListener('click', () => {
+        updateWebcamBgUI('raw', 255, 255, 255, 'RAW CAMERA');
+    });
+
+    document.getElementById('btnBgWhite')?.addEventListener('click', () => {
+        updateWebcamBgUI('color', 255, 255, 255, 'WHITE (#FFFFFF)');
+    });
+
+    document.getElementById('btnBgBlue')?.addEventListener('click', () => {
+        updateWebcamBgUI('color', 33, 150, 243, 'PASSPORT BLUE');
+    });
+
+    document.getElementById('btnBgRed')?.addEventListener('click', () => {
+        updateWebcamBgUI('color', 229, 57, 53, 'VISA RED');
+    });
+
+    const picker = document.getElementById('inputCustomBgColor');
+    const hexLbl = document.getElementById('lblCustomColorHex');
+    picker?.addEventListener('input', (e) => {
+        if (hexLbl) hexLbl.innerText = e.target.value.toUpperCase();
+    });
+
+    document.getElementById('btnApplyCustomBg')?.addEventListener('click', () => {
+        const hex = picker ? picker.value : '#00E5FF';
+        const { r, g, b } = hexToRgb(hex);
+        updateWebcamBgUI('color', r, g, b, `CUSTOM (${hex.toUpperCase()})`);
+    });
+}
+
 function updateAudioRelayUI(running) {
     isAudioRelayRunning = running;
     const btn = document.getElementById('btnStartAudioRelay');
@@ -36,6 +136,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initWindowControls();
     initDeviceDiscovery();
     initHardwareControls();
+    initWebcamBgControls();
     initSettings();
     checkDriverEnv();
 
@@ -90,19 +191,31 @@ function initWindowControls() {
         const origText = btn ? btn.innerText : '📸 Snapshot';
         if (btn) btn.innerText = '📸 Saving...';
         try {
-            const snapUrl = `${activeDevice.snapshotUrl}?_t=${Date.now()}`;
-            const res = await fetch(snapUrl);
-            if (!res.ok) throw new Error('Fetch failed');
-            const blob = await res.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = `DASMO_SNAPSHOT_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-            if (btn) btn.innerText = '✓ Saved!';
+            if (currentCamBgMode === 'color' && streamViewer?.canvas) {
+                // Export directly from rendered canvas with white/custom background
+                const dataUrl = streamViewer.canvas.toDataURL('image/jpeg', 0.95);
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `DASMO_PORTAL_PHOTO_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                if (btn) btn.innerText = '✓ Portal Photo Saved!';
+            } else {
+                const snapUrl = `${activeDevice.snapshotUrl}?_t=${Date.now()}`;
+                const res = await fetch(snapUrl);
+                if (!res.ok) throw new Error('Fetch failed');
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `DASMO_SNAPSHOT_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                if (btn) btn.innerText = '✓ Saved!';
+            }
         } catch (_) {
             window.dasmoAPI?.openExternal(activeDevice.snapshotUrl);
             if (btn) btn.innerText = '✓ Opened!';
@@ -979,6 +1092,44 @@ class UltraLowLatencyStreamViewer {
         this.renderCount = 0;
         this.lastFpsMeasure = Date.now();
         this.measuredFps = 0;
+
+        // AI Background Replacement (Webcam Portal Photo Mode)
+        this.bgMode = 'raw';
+        this.bgColor = { r: 255, g: 255, b: 255, hex: '#FFFFFF' };
+        this.segmenter = null;
+        this.segmentationReady = false;
+        this.isSegmenting = false;
+        this.latestMask = null;
+        this.offCanvas = null;
+        this.offCtx = null;
+        this._initSegmenter();
+    }
+
+    _initSegmenter() {
+        if (typeof SelfieSegmentation !== 'undefined') {
+            try {
+                this.segmenter = new SelfieSegmentation({
+                    locateFile: (file) => `vendor/mediapipe/${file}`
+                });
+                this.segmenter.setOptions({
+                    modelSelection: 1,
+                    selfieMode: false
+                });
+                this.segmenter.onResults((results) => {
+                    this.latestMask = results.segmentationMask;
+                    this.isSegmenting = false;
+                });
+                this.segmentationReady = true;
+                console.log('[StreamViewer] MediaPipe Selfie Segmentation initialized locally.');
+            } catch (e) {
+                console.warn('[StreamViewer] MediaPipe initialization error:', e);
+            }
+        }
+    }
+
+    setBg(mode, color) {
+        this.bgMode = mode;
+        if (color) this.bgColor = color;
     }
 
     start(device) {
@@ -1160,7 +1311,41 @@ class UltraLowLatencyStreamViewer {
                         this.canvas.height = bitmap.height;
                     }
 
-                    this.ctx.drawImage(bitmap, 0, 0);
+                    if (this.bgMode === 'color' && this.segmentationReady) {
+                        if (!this.isSegmenting && this.segmenter) {
+                            this.isSegmenting = true;
+                            this.segmenter.send({ image: bitmap }).catch(() => { this.isSegmenting = false; });
+                        }
+
+                        if (this.latestMask) {
+                            if (!this.offCanvas) {
+                                this.offCanvas = document.createElement('canvas');
+                                this.offCtx = this.offCanvas.getContext('2d');
+                            }
+                            if (this.offCanvas.width !== bitmap.width || this.offCanvas.height !== bitmap.height) {
+                                this.offCanvas.width = bitmap.width;
+                                this.offCanvas.height = bitmap.height;
+                            }
+
+                            // 1. Draw solid background color (e.g. #FFFFFF for portal)
+                            this.ctx.fillStyle = this.bgColor.hex || '#FFFFFF';
+                            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                            // 2. Offscreen composite person
+                            this.offCtx.clearRect(0, 0, bitmap.width, bitmap.height);
+                            this.offCtx.drawImage(this.latestMask, 0, 0, bitmap.width, bitmap.height);
+                            this.offCtx.globalCompositeOperation = 'source-in';
+                            this.offCtx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
+                            this.offCtx.globalCompositeOperation = 'source-over';
+
+                            // 3. Draw person onto the background canvas
+                            this.ctx.drawImage(this.offCanvas, 0, 0);
+                        } else {
+                            this.ctx.drawImage(bitmap, 0, 0);
+                        }
+                    } else {
+                        this.ctx.drawImage(bitmap, 0, 0);
+                    }
                     if (this.renderCount === 0) {
                         this._showCanvas();
                     }

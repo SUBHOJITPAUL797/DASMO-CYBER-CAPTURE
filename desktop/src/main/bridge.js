@@ -132,8 +132,11 @@ class HardwareDriverBridge extends EventEmitter {
             return;
         }
 
+        const bgModeArg = this.currentBgMode || 'raw';
+        const bgColorArg = `${this.currentBgColor?.r ?? 255},${this.currentBgColor?.g ?? 255},${this.currentBgColor?.b ?? 255}`;
+
         try {
-            this.bridgeProcess = spawn(this.pythonPath, [scriptPath, phoneIp, '60'], {
+            this.bridgeProcess = spawn(this.pythonPath, [scriptPath, phoneIp, '60', bgModeArg, bgColorArg], {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' }
             });
@@ -180,6 +183,24 @@ class HardwareDriverBridge extends EventEmitter {
         this.isActive = false;
         this.status = 'idle';
         this.emit('status_change', { status: 'idle', message: 'Virtual camera bridge stopped' });
+    }
+
+    setVirtualCamBg(mode, r = 255, g = 255, b = 255) {
+        this.currentBgMode = mode;
+        this.currentBgColor = { r, g, b };
+        if (this.bridgeProcess && this.bridgeProcess.stdin && !this.bridgeProcess.stdin.destroyed) {
+            try {
+                if (mode === 'raw') {
+                    this.bridgeProcess.stdin.write('BG_MODE raw\n');
+                } else if (mode === 'color') {
+                    this.bridgeProcess.stdin.write(`BG_MODE color ${r} ${g} ${b}\n`);
+                }
+                return true;
+            } catch (e) {
+                console.warn('[Bridge] Error writing BG command to virtual cam:', e);
+            }
+        }
+        return false;
     }
 
     startAudioBridge(phoneIp) {

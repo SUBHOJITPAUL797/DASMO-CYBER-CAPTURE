@@ -389,6 +389,10 @@ ipcMain.handle('driver:stop-cam', () => {
     return true;
 });
 
+ipcMain.handle('driver:set-cam-bg', (event, { mode, r, g, b }) => {
+    return driverBridge?.setVirtualCamBg(mode, r, g, b);
+});
+
 ipcMain.handle('driver:start-audio-bridge', (event, phoneIp) => {
     driverBridge.startAudioBridge(phoneIp);
     return true;

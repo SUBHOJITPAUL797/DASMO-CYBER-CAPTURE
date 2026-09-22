@@ -52,6 +52,18 @@ else:
     PORT = 8080
 
 TARGET_FPS = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+RAW_BG_MODE = sys.argv[3].lower() if len(sys.argv) > 3 else "raw"
+RAW_BG_COLOR = sys.argv[4] if len(sys.argv) > 4 else "255,255,255"
+
+INIT_COLOR = (255, 255, 255)
+try:
+    c_parts = [int(x.strip()) for x in RAW_BG_COLOR.split(",")]
+    if len(c_parts) == 3:
+        INIT_COLOR = (c_parts[0], c_parts[1], c_parts[2])
+except Exception:
+    pass
+
+INIT_MODE = "color" if RAW_BG_MODE in ["color", "white", "blue", "red"] else "raw"
 
 WS_URL   = f"ws://{PHONE_IP}:{PORT}/ws/video"
 HTTP_URL = f"http://{PHONE_IP}:{PORT}/video_feed"
@@ -62,7 +74,133 @@ print(f"  Phone Target: {PHONE_IP}:{PORT}", flush=True)
 print(f"  Stream URL:   {WS_URL}", flush=True)
 print(f"  Target Clock: {TARGET_FPS} FPS (Ultra-Smooth Zero-Lag)", flush=True)
 print(f"  SIMD Engine:  {'simplejpeg (libjpeg-turbo direct RGB)' if HAS_SIMPLEJPEG else 'OpenCV fallback'}", flush=True)
+print(f"  AI Background: {'ACTIVE (' + str(INIT_COLOR) + ')' if INIT_MODE == 'color' else 'RAW (Ready)'}", flush=True)
 print("==========================================================", flush=True)
+
+
+class AIBgSegmenter:
+    """Ultra-low latency AI person segmentation engine for live portal photos & virtual webcam."""
+    def __init__(self, initial_mode="raw", initial_color=(255, 255, 255)):
+        self.net = None
+        driver_dir = os.path.dirname(os.path.abspath(__file__))
+        model_paths = [
+            os.path.join(driver_dir, "selfie_segmentation_landscape.tflite"),
+            os.path.join(driver_dir, "..", "src", "renderer", "vendor", "mediapipe", "selfie_segmentation_landscape.tflite"),
+            os.path.join(driver_dir, "selfie_segmentation.tflite"),
+        ]
+        for mp in model_paths:
+            if os.path.exists(mp):
+                try:
+                    self.net = cv2.dnn.readNetFromTFLite(mp)
+                    print(f"[+] Loaded AI Selfie Segmentation Engine: {os.path.basename(mp)}", flush=True)
+                    break
+                except Exception as e:
+                    print(f"[!] Could not load TFLite model {mp}: {e}", flush=True)
+
+        self.lock = threading.Lock()
+        self.bg_mode = initial_mode
+        self.bg_color = initial_color
+        self.latest_raw_frame = None
+        self.latest_mask = None
+        self.latest_mask_dims = (0, 0)
+        self.running = True
+
+        if self.net is not None:
+            self.worker_thread = threading.Thread(target=self._inference_loop, daemon=True)
+            self.worker_thread.start()
+        else:
+            print("[!] AI background model not found. Running in standard raw mode.", flush=True)
+
+    def set_mode(self, mode, color=None):
+        with self.lock:
+            self.bg_mode = mode
+            if color is not None:
+                self.bg_color = color
+        print(f"[CAM] Virtual Camera BG set to: {mode} {self.bg_color if mode == 'color' else ''}", flush=True)
+
+    def update_raw_frame(self, frame):
+        with self.lock:
+            self.latest_raw_frame = frame
+
+    def _inference_loop(self):
+        while self.running:
+            with self.lock:
+                mode = self.bg_mode
+                frame = self.latest_raw_frame
+
+            if mode != "color" or frame is None or self.net is None:
+                time.sleep(0.015)
+                continue
+
+            try:
+                h, w = frame.shape[:2]
+                blob = cv2.dnn.blobFromImage(frame, 1.0 / 255.0, (256, 144), swapRB=False)
+                self.net.setInput(blob)
+                out = self.net.forward()
+                mask_small = out[0, 0]
+
+                # Threshold with gentle blur to produce smooth, natural human contours
+                mask_bin = (mask_small > 0.40).astype(np.uint8) * 255
+                mask_full = cv2.resize(mask_bin, (w, h), interpolation=cv2.INTER_LINEAR)
+                mask_soft = cv2.GaussianBlur(mask_full, (5, 5), 0)
+
+                with self.lock:
+                    self.latest_mask = mask_soft
+                    self.latest_mask_dims = (w, h)
+            except Exception:
+                time.sleep(0.04)
+
+            time.sleep(0.02)
+
+    def apply_background(self, frame):
+        with self.lock:
+            mode = self.bg_mode
+            color = self.bg_color
+            mask = self.latest_mask
+            mask_dims = self.latest_mask_dims
+
+        if mode != "color" or mask is None:
+            return frame
+
+        h, w = frame.shape[:2]
+        if mask_dims != (w, h):
+            mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
+
+        inv_mask = cv2.bitwise_not(mask)
+        bg_frame = np.full((h, w, 3), color, dtype=np.uint8)
+        fg_part = cv2.bitwise_and(frame, frame, mask=mask)
+        bg_part = cv2.bitwise_and(bg_frame, bg_frame, mask=inv_mask)
+        return cv2.add(fg_part, bg_part)
+
+
+ai_segmenter = AIBgSegmenter(initial_mode=INIT_MODE, initial_color=INIT_COLOR)
+
+
+def stdin_control_loop(segmenter):
+    """Listens for dynamic background color commands from desktop companion UI."""
+    while True:
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if parts[0] == "BG_MODE":
+                if parts[1] == "raw":
+                    segmenter.set_mode("raw")
+                elif parts[1] == "color" and len(parts) >= 5:
+                    r = int(parts[2])
+                    g = int(parts[3])
+                    b = int(parts[4])
+                    segmenter.set_mode("color", (r, g, b))
+        except Exception:
+            time.sleep(0.1)
+
+
+stdin_thread = threading.Thread(target=stdin_control_loop, args=(ai_segmenter,), daemon=True)
+stdin_thread.start()
 
 
 def decode_jpeg_to_rgb(jpeg_bytes):
@@ -287,6 +425,13 @@ def stream_loop(cam_instance):
         if r and f is not None:
             if f.shape[1] != target_w or f.shape[0] != target_h:
                 f = cv2.resize(f, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+
+            # Feed frame to AI segmentation worker
+            ai_segmenter.update_raw_frame(f)
+
+            # Apply live background replacement (White / Blue / Custom)
+            f = ai_segmenter.apply_background(f)
+
             last_valid_frame = f
             cam_instance.send(f)
         elif last_valid_frame is not None:
