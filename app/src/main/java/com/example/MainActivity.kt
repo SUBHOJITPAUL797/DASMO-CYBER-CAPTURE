@@ -16,10 +16,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.ui.screens.CyberAuthGateScreen
 import com.example.ui.screens.CyberDashboardScreen
 import com.example.ui.screens.CyberSettingsScreen
 import com.example.ui.theme.CyberBlack
 import com.example.ui.theme.MyApplicationTheme
+import com.example.viewmodel.CyberAuthViewModel
 import com.example.viewmodel.CyberCaptureViewModel
 
 class MainActivity : ComponentActivity() {
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 val navController = rememberNavController()
                 val viewModel: CyberCaptureViewModel = viewModel()
+                val authViewModel: CyberAuthViewModel = viewModel()
                 val config by viewModel.config.collectAsState()
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
                 val updateInfo by viewModel.appUpdateInfo.collectAsState()
@@ -52,37 +55,39 @@ class MainActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                     containerColor = CyberBlack
                 ) { innerPadding ->
-                    NavHost(
-                        navController = navController,
-                        startDestination = "dashboard",
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        composable("dashboard") {
-                            CyberDashboardScreen(
-                                viewModel = viewModel,
-                                onNavigateToSettings = {
-                                    navController.navigate("settings")
-                                }
-                            )
-                        }
+                    CyberAuthGateScreen(authViewModel = authViewModel) {
+                        NavHost(
+                            navController = navController,
+                            startDestination = "dashboard",
+                            modifier = Modifier.padding(innerPadding)
+                        ) {
+                            composable("dashboard") {
+                                CyberDashboardScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToSettings = {
+                                        navController.navigate("settings")
+                                    }
+                                )
+                            }
 
-                        composable("settings") {
-                            CyberSettingsScreen(
-                                config = config,
-                                pairedDevices = pairedDevices,
-                                updateInfo = updateInfo,
-                                downloadState = downloadState,
-                                onResolutionChanged = { viewModel.setResolution(it) },
-                                onToggleMirror = { viewModel.toggleMirror() },
-                                onToggleGrid = { viewModel.toggleGrid() },
-                                onAddDevice = { name, ip -> viewModel.addPairedDevice(name, ip) },
-                                onRemoveDevice = { viewModel.removePairedDevice(it) },
-                                onCheckUpdatesClick = { viewModel.checkAppUpdates(isManual = true) },
-                                onStartDownload = { viewModel.startInAppDownload(it) },
-                                onInstallApk = { viewModel.installDownloadedApk(it) },
-                                onCancelDownload = { viewModel.cancelInAppDownload() },
-                                onBackClick = { navController.popBackStack() }
-                            )
+                            composable("settings") {
+                                CyberSettingsScreen(
+                                    config = config,
+                                    pairedDevices = pairedDevices,
+                                    updateInfo = updateInfo,
+                                    downloadState = downloadState,
+                                    onResolutionChanged = { viewModel.setResolution(it) },
+                                    onToggleMirror = { viewModel.toggleMirror() },
+                                    onToggleGrid = { viewModel.toggleGrid() },
+                                    onAddDevice = { name, ip -> viewModel.addPairedDevice(name, ip) },
+                                    onRemoveDevice = { viewModel.removePairedDevice(it) },
+                                    onCheckUpdatesClick = { viewModel.checkAppUpdates(isManual = true) },
+                                    onStartDownload = { viewModel.startInAppDownload(it) },
+                                    onInstallApk = { viewModel.installDownloadedApk(it) },
+                                    onCancelDownload = { viewModel.cancelInAppDownload() },
+                                    onBackClick = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }
@@ -90,4 +95,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-

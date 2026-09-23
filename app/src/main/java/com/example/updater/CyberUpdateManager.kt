@@ -40,12 +40,14 @@ sealed class UpdateDownloadState {
 object CyberUpdateManager {
 
     private const val GITHUB_REPO = "SUBHOJITPAUL797/DASMO-CYBER-CAPTURE"
+    private const val GITHUB_RELEASES_URL = "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=15"
     private const val GITHUB_API_URL = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 
     suspend fun checkForUpdates(currentVersion: String = "1.0.0"): AppUpdateInfo = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
-            val url = URL(GITHUB_API_URL)
+            // Query releases list so desktop-only releases (MSI/EXE) are skipped and only actual APK releases are evaluated
+            val url = URL(GITHUB_RELEASES_URL)
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github.v3+json")
@@ -56,47 +58,58 @@ object CyberUpdateManager {
 
             if (conn.responseCode == 200) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                val response = reader.readText()
+                val response = reader.readText().trim()
                 reader.close()
 
-                val json = JSONObject(response)
-                val tagName = json.optString("tag_name", "").replace("v", "").trim()
-                val title = json.optString("name", "New Update Available")
-                val notes = json.optString("body", "Bug fixes and performance improvements.")
-                val htmlUrl = json.optString("html_url", "https://github.com/$GITHUB_REPO/releases")
+                if (response.startsWith("[")) {
+                    val releasesArray = org.json.JSONArray(response)
+                    for (i in 0 until releasesArray.length()) {
+                        val relObj = releasesArray.getJSONObject(i)
+                        val assets = relObj.optJSONArray("assets") ?: continue
+                        var apkUrl = ""
+                        for (j in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(j)
+                            val name = asset.optString("name", "").lowercase()
+                            val downloadUrl = asset.optString("browser_download_url", "")
+                            if (name.endsWith(".apk") && downloadUrl.isNotEmpty()) {
+                                apkUrl = downloadUrl
+                                break
+                            }
+                        }
 
-                var apkUrl = ""
-                var msiUrl = ""
-                val assets = json.optJSONArray("assets")
-                if (assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(i)
-                        val name = asset.optString("name", "").lowercase()
-                        val downloadUrl = asset.optString("browser_download_url", "")
-                        if (name.endsWith(".apk")) {
-                            apkUrl = downloadUrl
-                        } else if (name.endsWith(".msi")) {
-                            msiUrl = downloadUrl
+                        // Found the latest release that actually has an Android APK file!
+                        if (apkUrl.isNotEmpty()) {
+                            val tagName = relObj.optString("tag_name", "").replace("v", "", ignoreCase = true).trim()
+                            val title = relObj.optString("name", "New Update Available")
+                            val notes = relObj.optString("body", "Bug fixes and performance improvements.")
+                            val htmlUrl = relObj.optString("html_url", "https://github.com/$GITHUB_REPO/releases")
+                            val hasUpdate = isNewerVersion(tagName, currentVersion)
+
+                            return@withContext AppUpdateInfo(
+                                isUpdateAvailable = hasUpdate,
+                                currentVersion = currentVersion,
+                                latestVersion = tagName,
+                                releaseTitle = title,
+                                releaseNotes = notes,
+                                apkDownloadUrl = apkUrl,
+                                msiDownloadUrl = "",
+                                releaseUrl = htmlUrl
+                            )
                         }
                     }
+
+                    // No release in the list contains an APK
+                    return@withContext AppUpdateInfo(
+                        isUpdateAvailable = false,
+                        currentVersion = currentVersion,
+                        latestVersion = currentVersion,
+                        releaseTitle = "",
+                        releaseNotes = "",
+                        apkDownloadUrl = "",
+                        msiDownloadUrl = "",
+                        releaseUrl = "https://github.com/$GITHUB_REPO/releases"
+                    )
                 }
-
-                if (apkUrl.isEmpty()) {
-                    apkUrl = htmlUrl
-                }
-
-                val hasUpdate = isNewerVersion(tagName, currentVersion)
-
-                return@withContext AppUpdateInfo(
-                    isUpdateAvailable = hasUpdate,
-                    currentVersion = currentVersion,
-                    latestVersion = tagName,
-                    releaseTitle = title,
-                    releaseNotes = notes,
-                    apkDownloadUrl = apkUrl,
-                    msiDownloadUrl = msiUrl,
-                    releaseUrl = htmlUrl
-                )
             } else {
                 Log.w("CyberUpdateManager", "GitHub Releases API returned code: ${conn.responseCode}")
             }
@@ -128,7 +141,7 @@ object CyberUpdateManager {
                 if (l < c) return false
             }
         } catch (_: Exception) {
-            return latest.trim() != current.trim()
+            return false
         }
         return false
     }

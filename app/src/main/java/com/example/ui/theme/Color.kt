@@ -44,6 +44,7 @@ val CyberAmber = StudioWarning
 val CyberPurple = Color(0xFF8B5CF6)
 val CyberBlack = StudioDarkBg
 val CyberDark = StudioDark
+val CyberDarkSurface = StudioDark
 val CyberSurface = StudioSurface
 val CyberSurfaceVariant = StudioSurfaceElevated
 val CyberBorder = StudioBorder

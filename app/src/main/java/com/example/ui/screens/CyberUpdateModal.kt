@@ -402,21 +402,7 @@ fun CyberUpdateModal(
                                 )
                             }
 
-                            if (updateInfo.msiDownloadUrl.isNotEmpty()) {
-                                Button(
-                                    onClick = {
-                                        CyberUpdateManager.openUpdateLink(context, updateInfo.msiDownloadUrl)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = CyberSurfaceVariant,
-                                        contentColor = CyberTextPrimary
-                                    ),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth().testTag("btn_download_msi_update")
-                                ) {
-                                    Text("Download Windows MSI Installer", fontSize = 12.sp)
-                                }
-                            }
+
 
                             TextButton(
                                 onClick = onDismiss,
