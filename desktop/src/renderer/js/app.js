@@ -724,19 +724,42 @@ function connectToDevice(device) {
 }
 
 // In-Call Hardware Controls & Sliders
+function updatePauseVideoUi(paused) {
+    const btn = document.getElementById('btnPauseVideo');
+    const lbl = document.getElementById('lblPauseVideo');
+    if (paused) {
+        btn?.classList.add('danger');
+        if (lbl) lbl.innerText = 'Resume Video';
+    } else {
+        btn?.classList.remove('danger');
+        if (lbl) lbl.innerText = 'Pause Video';
+    }
+}
+
 function initHardwareControls() {
-    // ⏸️ Pause Video (Privacy Slate)
-    document.getElementById('btnPauseVideo')?.addEventListener('click', () => {
+    // ⏸️ Pause Video (Real Video Frame Freeze)
+    document.getElementById('btnPauseVideo')?.addEventListener('click', async () => {
         isVideoPaused = !isVideoPaused;
         sendControl('pause_video', isVideoPaused ? 'true' : 'false');
-        const btn = document.getElementById('btnPauseVideo');
-        const lbl = document.getElementById('lblPauseVideo');
+        updatePauseVideoUi(isVideoPaused);
+
         if (isVideoPaused) {
-            btn.classList.add('danger');
-            lbl.innerText = 'Resume Video';
+            const frameDataUrl = streamViewer ? streamViewer.getLatestFrameDataUrl() : null;
+            if (frameDataUrl && window.dasmoAPI?.freezeVirtualCamera) {
+                try {
+                    await window.dasmoAPI.freezeVirtualCamera(frameDataUrl);
+                } catch (e) {
+                    console.warn('[Pause] Failed to freeze virtual camera:', e);
+                }
+            }
         } else {
-            btn.classList.remove('danger');
-            lbl.innerText = 'Pause Video';
+            if (window.dasmoAPI?.unfreezeVirtualCamera) {
+                try {
+                    await window.dasmoAPI.unfreezeVirtualCamera();
+                } catch (e) {
+                    console.warn('[Pause] Failed to unfreeze virtual camera:', e);
+                }
+            }
         }
     });
 
@@ -1029,17 +1052,19 @@ function startStatusPolling() {
                     if (micTxt) micTxt.innerText = `${db.toFixed(1)} dB`;
                 }
 
-                // Privacy Video Pause Sync
+                // Real Video Pause Sync
                 if (data.is_video_paused !== undefined && data.is_video_paused !== isVideoPaused) {
                     isVideoPaused = data.is_video_paused;
-                    const btn = document.getElementById('btnPauseVideo');
-                    const lbl = document.getElementById('lblPauseVideo');
+                    updatePauseVideoUi(isVideoPaused);
                     if (isVideoPaused) {
-                        btn?.classList.add('danger');
-                        if (lbl) lbl.innerText = 'Resume Video';
+                        const frameDataUrl = streamViewer ? streamViewer.getLatestFrameDataUrl() : null;
+                        if (frameDataUrl && window.dasmoAPI?.freezeVirtualCamera) {
+                            window.dasmoAPI.freezeVirtualCamera(frameDataUrl);
+                        }
                     } else {
-                        btn?.classList.remove('danger');
-                        if (lbl) lbl.innerText = 'Pause Video';
+                        if (window.dasmoAPI?.unfreezeVirtualCamera) {
+                            window.dasmoAPI.unfreezeVirtualCamera();
+                        }
                     }
                 }
 
@@ -1302,7 +1327,7 @@ async function checkDesktopUpdates(isManual = false) {
 
     try {
         const updateInfo = await window.dasmoAPI.checkForUpdates();
-        const currentVer = (updateInfo && updateInfo.currentVersion) || (await window.dasmoAPI.getAppVersion?.()) || '1.4.9';
+        const currentVer = (updateInfo && updateInfo.currentVersion) || (await window.dasmoAPI.getAppVersion?.()) || '1.6.0';
         const modalCur = document.getElementById('modalCurrentVer');
         if (modalCur) modalCur.innerText = `CURRENT: v${currentVer}`;
 
@@ -1318,7 +1343,11 @@ async function checkDesktopUpdates(isManual = false) {
                 document.getElementById('desktopUpdateModal')?.classList.remove('open');
             };
 
-            document.getElementById('desktopUpdateModal')?.classList.add('open');
+            // ONLY show update modal if the user manually requested it in Settings
+            // NEVER interrupt the user on app startup!
+            if (isManual) {
+                document.getElementById('desktopUpdateModal')?.classList.add('open');
+            }
             if (versionText) {
                 versionText.innerText = `Update Available: v${updateInfo.latestVersion}`;
                 versionText.style.color = 'var(--green)';
@@ -1528,6 +1557,20 @@ class UltraLowLatencyStreamViewer {
         }
     }
 
+    getLatestFrameDataUrl() {
+        try {
+            if (this.latestRawCanvas && this.latestRawCanvas.width > 0) {
+                return this.latestRawCanvas.toDataURL('image/jpeg', 0.95);
+            }
+            if (this.canvas && this.canvas.width > 0) {
+                return this.canvas.toDataURL('image/jpeg', 0.95);
+            }
+        } catch (e) {
+            console.warn('[StreamViewer] getLatestFrameDataUrl error:', e);
+        }
+        return null;
+    }
+
     _scheduleRender() {
         if (this.isRendering || !this.pendingBuffer) return;
         this.isRendering = true;
@@ -1535,6 +1578,11 @@ class UltraLowLatencyStreamViewer {
         requestAnimationFrame(async () => {
             const buf = this.pendingBuffer;
             this.pendingBuffer = null; // Cleared so incoming packets never queue
+
+            if (isVideoPaused) {
+                this.isRendering = false;
+                return;
+            }
 
             if (buf) {
                 try {

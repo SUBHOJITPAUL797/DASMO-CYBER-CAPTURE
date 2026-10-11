@@ -67,6 +67,9 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     private val _downloadState = MutableStateFlow<com.example.updater.UpdateDownloadState>(com.example.updater.UpdateDownloadState.Idle)
     val downloadState: StateFlow<com.example.updater.UpdateDownloadState> = _downloadState.asStateFlow()
 
+    private val _frozenFrameBitmap = MutableStateFlow<Bitmap?>(null)
+    val frozenFrameBitmap: StateFlow<Bitmap?> = _frozenFrameBitmap.asStateFlow()
+
     private var downloadJob: Job? = null
 
     private var cameraManager: CyberCameraManager? = null
@@ -420,8 +423,13 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     fun toggleVideoPause() {
         val newPaused = !_config.value.isVideoPaused
         _config.value = _config.value.copy(isVideoPaused = newPaused)
+        if (newPaused) {
+            _frozenFrameBitmap.value = currentPreviewView?.bitmap ?: cameraManager?.getLastRealBitmap()
+        } else {
+            _frozenFrameBitmap.value = null
+        }
         rebindCamera()
-        _toastMessage.value = if (newPaused) "Video Stream Paused (Privacy Slate)" else "Video Stream Resumed (Live)"
+        _toastMessage.value = if (newPaused) "Video Stream Paused (Frame Frozen)" else "Video Stream Resumed (Live)"
     }
 
     private fun rebindCamera() {
@@ -438,6 +446,11 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                         val pause = value.toBoolean()
                         if (_config.value.isVideoPaused != pause) {
                             _config.value = _config.value.copy(isVideoPaused = pause)
+                            if (pause) {
+                                _frozenFrameBitmap.value = currentPreviewView?.bitmap ?: cameraManager?.getLastRealBitmap()
+                            } else {
+                                _frozenFrameBitmap.value = null
+                            }
                             rebindCamera()
                         }
                     } else {

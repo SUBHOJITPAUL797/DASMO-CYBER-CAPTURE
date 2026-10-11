@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,8 +26,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
@@ -47,6 +52,7 @@ fun CyberViewfinder(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val frozenBitmap by viewModel.frozenFrameBitmap.collectAsState()
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -76,6 +82,16 @@ fun CyberViewfinder(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Real Camera Frame Freeze Overlay (True Video Pause)
+        if (config.isVideoPaused && frozenBitmap != null) {
+            Image(
+                bitmap = frozenBitmap!!.asImageBitmap(),
+                contentDescription = "Frozen Camera Frame",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
 
         // Overlay: Tactical Cyber HUD Grid & Reticle
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -167,8 +183,8 @@ fun CyberViewfinder(
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Text(
-                text = if (stats.isStreaming) "LIVE AIR LINK STREAMING" else "STUDIO READY · TAP START",
-                color = if (stats.isStreaming) StudioSuccess else StudioTextMuted,
+                text = if (config.isVideoPaused) "⏸ VIDEO PAUSED (FRAME FROZEN)" else if (stats.isStreaming) "LIVE AIR LINK STREAMING" else "STUDIO READY · TAP START",
+                color = if (config.isVideoPaused) StudioWarning else if (stats.isStreaming) StudioSuccess else StudioTextMuted,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.SemiBold,

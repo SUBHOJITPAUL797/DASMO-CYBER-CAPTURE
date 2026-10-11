@@ -61,9 +61,8 @@ class CyberCameraManager(
     private var nv21Rotated: ByteArray? = null
     private val reusableBos = ByteArrayOutputStream(65536)
 
-    private var cachedPauseBitmap: Bitmap? = null
-    private var cachedPauseWidth = 0
-    private var cachedPauseHeight = 0
+    @Volatile
+    private var lastRealJpegBytes: ByteArray? = null
 
     private val _measuredFps = MutableStateFlow(0f)
     val measuredFps: StateFlow<Float> = _measuredFps
@@ -222,11 +221,18 @@ class CyberCameraManager(
 
                 val isPaused = currentConfig.isVideoPaused
                 if (isPaused) {
-                    val pauseBmp = generatePrivacyPauseBitmap(outWidth, outHeight)
-                    synchronized(reusableBos) {
-                        reusableBos.reset()
-                        pauseBmp.compress(Bitmap.CompressFormat.JPEG, 65, reusableBos)
-                        jpegBytes = reusableBos.toByteArray()
+                    val frozen = lastRealJpegBytes
+                    if (frozen != null) {
+                        jpegBytes = frozen
+                    } else {
+                        // Safe blank frame only if pause is triggered before first camera frame arrives
+                        val emptyBmp = Bitmap.createBitmap(outWidth.coerceAtLeast(320), outHeight.coerceAtLeast(240), Bitmap.Config.RGB_565)
+                        synchronized(reusableBos) {
+                            reusableBos.reset()
+                            emptyBmp.compress(Bitmap.CompressFormat.JPEG, 60, reusableBos)
+                            jpegBytes = reusableBos.toByteArray()
+                        }
+                        emptyBmp.recycle()
                     }
                 } else if (currentConfig.activeFilter != CyberFilter.NONE) {
                     val yuvImage = YuvImage(activeBuffer, ImageFormat.NV21, outWidth, outHeight, null)
@@ -246,6 +252,7 @@ class CyberCameraManager(
                         if (filtered != bmp) filtered.recycle()
                         bmp.recycle()
                     }
+                    lastRealJpegBytes = jpegBytes
                 } else {
                     // ULTRA-FAST ZERO-ALLOCATION NATIVE PATH (Sub-6ms, 30+ FPS)
                     val yuvImage = YuvImage(activeBuffer, ImageFormat.NV21, outWidth, outHeight, null)
@@ -255,6 +262,7 @@ class CyberCameraManager(
                         yuvImage.compressToJpeg(Rect(0, 0, outWidth, outHeight), q, reusableBos)
                         jpegBytes = reusableBos.toByteArray()
                     }
+                    lastRealJpegBytes = jpegBytes
                 }
 
                 onNewFrameAvailable(jpegBytes)
@@ -492,87 +500,13 @@ class CyberCameraManager(
         }
     }
 
-    private fun generatePrivacyPauseBitmap(width: Int, height: Int): Bitmap {
-        val targetW = width.coerceAtLeast(320)
-        val targetH = height.coerceAtLeast(240)
-        if (cachedPauseBitmap != null && cachedPauseWidth == targetW && cachedPauseHeight == targetH) {
-            return cachedPauseBitmap!!
+    fun getLastRealBitmap(): Bitmap? {
+        val bytes = lastRealJpegBytes ?: return null
+        return try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (_: Exception) {
+            null
         }
-
-        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bitmap)
-        
-        // Dark cyber slate background
-        canvas.drawColor(android.graphics.Color.rgb(8, 12, 20))
-        
-        val paintGrid = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(40, 0, 229, 255)
-            strokeWidth = 2f
-            style = android.graphics.Paint.Style.STROKE
-        }
-        
-        // Grid pattern
-        val step = 40f
-        var x = 0f
-        while (x < targetW) {
-            canvas.drawLine(x, 0f, x, targetH.toFloat(), paintGrid)
-            x += step
-        }
-        var y = 0f
-        while (y < targetH) {
-            canvas.drawLine(0f, y, targetW.toFloat(), y, paintGrid)
-            y += step
-        }
-        
-        val cx = targetW / 2f
-        val cy = targetH / 2f
-        
-        // Glowing Pause Banner Box
-        val bannerPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(220, 20, 28, 46)
-            style = android.graphics.Paint.Style.FILL
-        }
-        val borderPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.rgb(255, 61, 113) // Cyber red
-            strokeWidth = 3f
-            style = android.graphics.Paint.Style.STROKE
-        }
-        
-        val rect = android.graphics.RectF(cx - 240f, cy - 90f, cx + 240f, cy + 90f)
-        canvas.drawRoundRect(rect, 20f, 20f, bannerPaint)
-        canvas.drawRoundRect(rect, 20f, 20f, borderPaint)
-        
-        // Pause Double Bars Icon
-        val barPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.rgb(255, 61, 113)
-            style = android.graphics.Paint.Style.FILL
-        }
-        canvas.drawRoundRect(android.graphics.RectF(cx - 25f, cy - 50f, cx - 10f, cy - 10f), 6f, 6f, barPaint)
-        canvas.drawRoundRect(android.graphics.RectF(cx + 10f, cy - 50f, cx + 25f, cy - 10f), 6f, 6f, barPaint)
-        
-        // Text
-        val textTitlePaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.rgb(255, 255, 255)
-            textSize = 22f
-            typeface = android.graphics.Typeface.MONOSPACE
-            textAlign = android.graphics.Paint.Align.CENTER
-            isFakeBoldText = true
-        }
-        canvas.drawText("VIDEO PAUSED // PRIVACY HOLD", cx, cy + 25f, textTitlePaint)
-        
-        val textSubPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.rgb(0, 229, 255)
-            textSize = 14f
-            typeface = android.graphics.Typeface.MONOSPACE
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-        canvas.drawText("AUDIO & CALL LINK ACTIVE", cx, cy + 55f, textSubPaint)
-        
-        cachedPauseBitmap = bitmap
-        cachedPauseWidth = targetW
-        cachedPauseHeight = targetH
-
-        return bitmap
     }
 
     fun release() {
