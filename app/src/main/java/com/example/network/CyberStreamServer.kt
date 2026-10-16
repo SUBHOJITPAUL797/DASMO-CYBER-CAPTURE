@@ -239,6 +239,8 @@ class CyberStreamServer(
 
                         // Channel C: Speaker WebSocket (PC Audio -> Phone Loudspeaker)
                         uri.startsWith("/ws/speaker") -> {
+                            socket.tcpNoDelay = true
+                            socket.receiveBufferSize = 65536
                             isSpeakerFeedActive.set(true)
                             updateClientCount()
                             Log.i("CyberStreamServer", "[WS SPEAKER] PC speaker stream connected from ${socket.inetAddress?.hostAddress}")
@@ -388,7 +390,7 @@ class CyberStreamServer(
 
                         val json = (telemetryProvider?.invoke() ?: JSONObject()).apply {
                             put("app", "DASMO CYBER CAPTURE")
-                            put("version", "1.4.3")
+                            put("version", "1.6.0")
                             put("clients", connectedClientsCount.get())
                             put("bitrate_kbps", _bitrateKbpsFlow.value)
                             put("total_bytes", totalBytesSent.get())

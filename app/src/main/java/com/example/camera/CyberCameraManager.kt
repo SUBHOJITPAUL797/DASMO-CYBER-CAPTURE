@@ -185,13 +185,15 @@ class CyberCameraManager(
             .build()
 
         imageAnalysis?.setAnalyzer(analysisExecutor) { imageProxy ->
-            // CRITICAL FIX: NO isProcessingFrame gate here.
-            // The old AtomicBoolean gate was the root cause of 1-2 FPS:
-            //   - NV21 rotation of 1280x720 takes ~40-50ms on mid-range phones
-            //   - Gate blocked the next frame → camera delivered frames at 2 FPS!
-            // STRATEGY_KEEP_ONLY_LATEST already ensures we get the freshest frame.
-            // The 2-thread executor pools frame pickup and processing independently.
             try {
+                if (currentConfig.isVideoPaused) {
+                    val frozen = lastRealJpegBytes
+                    if (frozen != null) {
+                        onNewFrameAvailable(frozen)
+                    }
+                    return@setAnalyzer
+                }
+
                 val width = imageProxy.width
                 val height = imageProxy.height
                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
@@ -219,22 +221,7 @@ class CyberCameraManager(
                 val activeBuffer = if (rotationDegrees != 0) rotated else raw
                 var jpegBytes: ByteArray
 
-                val isPaused = currentConfig.isVideoPaused
-                if (isPaused) {
-                    val frozen = lastRealJpegBytes
-                    if (frozen != null) {
-                        jpegBytes = frozen
-                    } else {
-                        // Safe blank frame only if pause is triggered before first camera frame arrives
-                        val emptyBmp = Bitmap.createBitmap(outWidth.coerceAtLeast(320), outHeight.coerceAtLeast(240), Bitmap.Config.RGB_565)
-                        synchronized(reusableBos) {
-                            reusableBos.reset()
-                            emptyBmp.compress(Bitmap.CompressFormat.JPEG, 60, reusableBos)
-                            jpegBytes = reusableBos.toByteArray()
-                        }
-                        emptyBmp.recycle()
-                    }
-                } else if (currentConfig.activeFilter != CyberFilter.NONE) {
+                if (currentConfig.activeFilter != CyberFilter.NONE) {
                     val yuvImage = YuvImage(activeBuffer, ImageFormat.NV21, outWidth, outHeight, null)
                     synchronized(reusableBos) {
                         reusableBos.reset()
@@ -498,6 +485,10 @@ class CyberCameraManager(
             setTorch(newConfig.isTorchOn)
             setZoom(newConfig.zoomFactor)
         }
+    }
+
+    fun setVideoPaused(paused: Boolean) {
+        currentConfig = currentConfig.copy(isVideoPaused = paused)
     }
 
     fun getLastRealBitmap(): Bitmap? {

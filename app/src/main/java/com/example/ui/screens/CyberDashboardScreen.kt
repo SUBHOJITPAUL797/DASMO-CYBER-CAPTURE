@@ -76,9 +76,10 @@ fun CyberDashboardScreen(
     var showFiltersModal by remember { mutableStateOf(false) }
     var showAudioModal by remember { mutableStateOf(false) }
     var showUpdateModal by remember { mutableStateOf(false) }
+    var dismissedUpdateVersion by remember { mutableStateOf("") }
 
-    LaunchedEffect(updateInfo.isUpdateAvailable) {
-        if (updateInfo.isUpdateAvailable) {
+    LaunchedEffect(updateInfo.isUpdateAvailable, updateInfo.latestVersion) {
+        if (updateInfo.isUpdateAvailable && updateInfo.latestVersion.isNotEmpty() && updateInfo.latestVersion != dismissedUpdateVersion) {
             showUpdateModal = true
         }
     }
@@ -280,7 +281,10 @@ fun CyberDashboardScreen(
                     onStartDownload = { viewModel.startInAppDownload(it) },
                     onInstallApk = { viewModel.installDownloadedApk(it) },
                     onCancelDownload = { viewModel.cancelInAppDownload() },
-                    onDismiss = { showUpdateModal = false }
+                    onDismiss = {
+                        showUpdateModal = false
+                        dismissedUpdateVersion = updateInfo.latestVersion
+                    }
                 )
             }
         }

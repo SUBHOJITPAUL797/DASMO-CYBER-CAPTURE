@@ -428,7 +428,7 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         } else {
             _frozenFrameBitmap.value = null
         }
-        rebindCamera()
+        cameraManager?.setVideoPaused(newPaused)
         _toastMessage.value = if (newPaused) "Video Stream Paused (Frame Frozen)" else "Video Stream Resumed (Live)"
     }
 
@@ -451,7 +451,7 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                             } else {
                                 _frozenFrameBitmap.value = null
                             }
-                            rebindCamera()
+                            cameraManager?.setVideoPaused(pause)
                         }
                     } else {
                         toggleVideoPause()

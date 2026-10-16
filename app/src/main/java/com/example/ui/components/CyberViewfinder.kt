@@ -80,17 +80,23 @@ fun CyberViewfinder(
                 viewModel.initCameraManager(lifecycleOwner, previewView)
                 previewView
             },
+            update = { view ->
+                view.visibility = if (config.isVideoPaused) android.view.View.INVISIBLE else android.view.View.VISIBLE
+            },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Real Camera Frame Freeze Overlay (True Video Pause)
-        if (config.isVideoPaused && frozenBitmap != null) {
-            Image(
-                bitmap = frozenBitmap!!.asImageBitmap(),
-                contentDescription = "Frozen Camera Frame",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+        // Real Camera Frame Freeze (True Video Pause)
+        if (config.isVideoPaused) {
+            val bmp = frozenBitmap
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = "Frozen Camera Frame",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
 
         // Overlay: Tactical Cyber HUD Grid & Reticle

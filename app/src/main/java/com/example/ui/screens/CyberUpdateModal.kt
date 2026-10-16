@@ -104,7 +104,7 @@ fun CyberUpdateModal(
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            text = "Software Update",
+                            text = "Android App Update (APK)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp,
                             color = CyberTextPrimary
@@ -396,7 +396,7 @@ fun CyberUpdateModal(
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.size(8.dp))
                                 Text(
-                                    text = if (updateInfo.isUpdateAvailable) "Download & Install Update" else "Re-install Update",
+                                    text = if (updateInfo.isUpdateAvailable) "Download & Install Android APK (v${updateInfo.latestVersion})" else "Re-install Android APK",
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp
                                 )

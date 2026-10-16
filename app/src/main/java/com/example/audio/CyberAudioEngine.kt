@@ -33,7 +33,7 @@ class CyberAudioEngine(private val context: Context) {
 
     private val sampleRate = 48000
     private val channelConfigIn = AudioFormat.CHANNEL_IN_MONO
-    private val channelConfigOut = AudioFormat.CHANNEL_OUT_MONO
+    private val channelConfigOut = AudioFormat.CHANNEL_OUT_STEREO // High-Res 48kHz Stereo Output (Left + Right)
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
     private var audioRecord: AudioRecord? = null
@@ -58,10 +58,15 @@ class CyberAudioEngine(private val context: Context) {
     @Volatile
     private var currentRouting: AudioRouting = AudioRouting.AUTO
 
-    // Decoupled Low-Latency Buffer for smooth Wi-Fi speaker playback without stuttering or delay
-    private val speakerQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(10)
+    // Decoupled Low-Latency Adaptive Jitter Buffer (30 chunks = 600ms capacity ceiling)
+    private val speakerQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(30)
     @Volatile private var isSpeakerWorkerRunning = false
     private var speakerWorkerThread: Thread? = null
+
+    // Adaptive buffering state
+    @Volatile private var isBuffering = true
+    private val prebufferChunks = 3   // 3 chunks @ 20ms = 60ms initial cushion for silky smooth jitter resilience
+    private val maxLagChunks = 12     // 12 chunks @ 20ms = 240ms max drift ceiling before smooth trim
 
     private val audioDeviceCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         object : AudioDeviceCallback() {
@@ -313,9 +318,9 @@ class CyberAudioEngine(private val context: Context) {
             audioTrack?.release()
             audioTrack = null
 
-            // Low-latency hardware buffer size (~42ms at 48kHz 16-bit mono)
+            // High-resolution low-latency stereo hardware buffer size (~40-60ms headroom)
             val minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
-            val bufferSize = (minBufSize * 2).coerceAtLeast(4096)
+            val bufferSize = (minBufSize * 3).coerceAtLeast(8192)
 
             applyAudioRouting(routing)
 
@@ -470,6 +475,45 @@ class CyberAudioEngine(private val context: Context) {
         }
     }
 
+    private fun applySoftFadeIn(pcmStereo: ByteArray) {
+        val numFrames = kotlin.math.min(32, pcmStereo.size / 4)
+        for (i in 0 until numFrames) {
+            val factor = (i + 1).toFloat() / numFrames.toFloat()
+            val byteIdx = i * 4
+
+            // Left channel 16-bit LE
+            var left = (pcmStereo[byteIdx].toInt() and 0xFF) or (pcmStereo[byteIdx + 1].toInt() shl 8)
+            if (left >= 32768) left -= 65536
+            val rampedLeft = (left * factor).toInt().coerceIn(-32768, 32767)
+            pcmStereo[byteIdx] = (rampedLeft and 0xFF).toByte()
+            pcmStereo[byteIdx + 1] = ((rampedLeft shr 8) and 0xFF).toByte()
+
+            // Right channel 16-bit LE
+            var right = (pcmStereo[byteIdx + 2].toInt() and 0xFF) or (pcmStereo[byteIdx + 3].toInt() shl 8)
+            if (right >= 32768) right -= 65536
+            val rampedRight = (right * factor).toInt().coerceIn(-32768, 32767)
+            pcmStereo[byteIdx + 2] = (rampedRight and 0xFF).toByte()
+            pcmStereo[byteIdx + 3] = ((rampedRight shr 8) and 0xFF).toByte()
+        }
+    }
+
+    private fun convertMonoToStereo(monoPcm: ByteArray, offset: Int, length: Int): ByteArray {
+        val samples = length / 2
+        val stereo = ByteArray(samples * 4)
+        for (i in 0 until samples) {
+            val b0 = monoPcm[offset + i * 2]
+            val b1 = monoPcm[offset + i * 2 + 1]
+            val outIdx = i * 4
+            // Left
+            stereo[outIdx] = b0
+            stereo[outIdx + 1] = b1
+            // Right
+            stereo[outIdx + 2] = b0
+            stereo[outIdx + 3] = b1
+        }
+        return stereo
+    }
+
     private fun ensureSpeakerWorkerStarted() {
         if (isSpeakerWorkerRunning && speakerWorkerThread?.isAlive == true) return
         isSpeakerWorkerRunning = true
@@ -481,6 +525,8 @@ class CyberAudioEngine(private val context: Context) {
                 initSpeakerPlayback(currentRouting, 1.0f)
             }
 
+            var needsFadeIn = true
+
             while (isSpeakerWorkerRunning) {
                 try {
                     val track = audioTrack
@@ -489,14 +535,37 @@ class CyberAudioEngine(private val context: Context) {
                         continue
                     }
 
+                    // Adaptive pre-buffering gate: accumulate prebufferChunks (60ms) before starting/resuming
+                    if (isBuffering) {
+                        if (speakerQueue.size < prebufferChunks) {
+                            Thread.sleep(5)
+                            continue
+                        } else {
+                            isBuffering = false
+                            needsFadeIn = true
+                        }
+                    }
+
                     if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                         try {
                             track.play()
                         } catch (_: Exception) {}
                     }
 
-                    // Blocking poll for next PCM chunk from network
-                    val chunk = speakerQueue.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS) ?: continue
+                    // Blocking poll for next PCM chunk from network (poll up to 35ms)
+                    val chunk = speakerQueue.poll(35, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    if (chunk == null) {
+                        // Network starved / packet gap detected: re-enter buffering state to avoid rapid pop/click
+                        isBuffering = true
+                        needsFadeIn = true
+                        continue
+                    }
+
+                    // Apply anti-click micro-ramp on start or recovery
+                    if (needsFadeIn) {
+                        applySoftFadeIn(chunk)
+                        needsFadeIn = false
+                    }
 
                     var totalWritten = 0
                     while (totalWritten < chunk.size && isSpeakerWorkerRunning) {
@@ -528,15 +597,23 @@ class CyberAudioEngine(private val context: Context) {
         try {
             ensureSpeakerWorkerStarted()
 
-            val chunk = data.copyOfRange(offset, offset + length)
+            val chunk = if (length == 1920 || length % 4 != 0) {
+                convertMonoToStereo(data, offset, length)
+            } else {
+                data.copyOfRange(offset, offset + length)
+            }
 
-            // Ultra-low latency real-time drift control:
-            // Keep queue tight (max 4 chunks = ~80ms buffer) so PC audio and video stay in lockstep
-            while (speakerQueue.size > 4) {
+            // Real-time jitter drift control:
+            // Trim only if backlog exceeds maxLagChunks (12 chunks = ~240ms ceiling)
+            while (speakerQueue.size > maxLagChunks) {
                 speakerQueue.poll()
             }
 
             speakerQueue.offer(chunk)
+
+            if (isBuffering && speakerQueue.size >= prebufferChunks) {
+                isBuffering = false
+            }
         } catch (e: Exception) {
             Log.w("CyberAudioEngine", "Error enqueuing speaker PCM chunk", e)
         }
@@ -544,6 +621,7 @@ class CyberAudioEngine(private val context: Context) {
 
     fun stopSpeakerPlayback() {
         isSpeakerWorkerRunning = false
+        isBuffering = true
         speakerWorkerThread?.interrupt()
         speakerWorkerThread = null
         speakerQueue.clear()

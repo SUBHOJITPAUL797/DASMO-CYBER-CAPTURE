@@ -71,7 +71,7 @@ object CyberUpdateManager {
                             val asset = assets.getJSONObject(j)
                             val name = asset.optString("name", "").lowercase()
                             val downloadUrl = asset.optString("browser_download_url", "")
-                            if (name.endsWith(".apk") && downloadUrl.isNotEmpty()) {
+                            if (name.endsWith(".apk") && !name.endsWith(".msi") && !name.endsWith(".exe") && downloadUrl.isNotEmpty()) {
                                 apkUrl = downloadUrl
                                 break
                             }
@@ -80,7 +80,12 @@ object CyberUpdateManager {
                         // Found the latest release that actually has an Android APK file!
                         if (apkUrl.isNotEmpty()) {
                             val tagName = relObj.optString("tag_name", "").replace("v", "", ignoreCase = true).trim()
-                            val title = relObj.optString("name", "New Update Available")
+                            val rawTitle = relObj.optString("name", "New Update Available")
+                            val title = if (rawTitle.contains("msi", ignoreCase = true) || rawTitle.contains("windows", ignoreCase = true)) {
+                                "DASMO CYBER CAPTURE Android Update v$tagName"
+                            } else {
+                                rawTitle
+                            }
                             val notes = relObj.optString("body", "Bug fixes and performance improvements.")
                             val htmlUrl = relObj.optString("html_url", "https://github.com/$GITHUB_REPO/releases")
                             val hasUpdate = isNewerVersion(tagName, currentVersion)

@@ -53,8 +53,9 @@ else:
     PORT = 8080
 
 SAMPLE_RATE = 48000
-CHANNELS = 1
-BLOCK_SIZE = 960  # 20.0ms chunk size at 48kHz (WebRTC standard for jitter resilience & low latency)
+SPEAKER_CHANNELS = 2  # High-Resolution Industry-Grade Stereo (Left + Right)
+MIC_CHANNELS = 1      # Virtual Microphone (Mono)
+BLOCK_SIZE = 960      # 20.0ms chunk size at 48kHz (WebRTC standard for jitter resilience & low latency)
 
 WS_MIC_URL = f"ws://{PHONE_IP}:{PORT}/ws/mic"
 WS_SPEAKER_URL = f"ws://{PHONE_IP}:{PORT}/ws/speaker"
@@ -63,7 +64,7 @@ AUDIO_FEED_URL = f"http://{PHONE_IP}:{PORT}/audio_feed"
 print("==========================================================", flush=True)
 print("  [AUDIO] DASMO CYBER CAPTURE // WEBSOCKET AUDIO ENGINE   ", flush=True)
 print(f"  Phone Target: {PHONE_IP}:{PORT}", flush=True)
-print(f"  [1] PC System Audio  ==>  Mobile Phone Speaker ({WS_SPEAKER_URL})", flush=True)
+print(f"  [1] PC System Audio  ==>  Mobile Phone Speaker ({WS_SPEAKER_URL}) [48kHz STEREO]", flush=True)
 print(f"  [2] Phone Microphone ==>  PC Virtual Mic ({WS_MIC_URL})", flush=True)
 print(f"  Backend: {'PyAudioWPatch (Native WASAPI)' if HAS_PYAUDIO_WPATCH else 'sounddevice'}", flush=True)
 print("==========================================================", flush=True)
@@ -141,7 +142,7 @@ class PcToPhoneSpeakerTransmitter:
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.audio_queue = queue.Queue(maxsize=10)  # Low-latency queue (~80ms buffer)
+        self.audio_queue = queue.Queue(maxsize=30)  # Generous low-latency buffer (~600ms ceiling)
         self.running = True
         self.current_device_name = "Detecting..."
         
@@ -154,12 +155,13 @@ class PcToPhoneSpeakerTransmitter:
         self.capture_thread.start()
 
     def _network_sender_loop(self):
-        """Dedicated thread to send queued PCM chunks to phone without blocking audio callbacks."""
+        """Dedicated thread to send queued PCM chunks to phone with zero latency and smooth continuity."""
         while self.running:
             sock = None
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
                 sock.settimeout(5)
                 sock.connect((self.ip, self.port))
                 sock.settimeout(None)
@@ -167,13 +169,13 @@ class PcToPhoneSpeakerTransmitter:
                 is_ws = True
                 try:
                     ws_handshake(sock, "/ws/speaker", self.ip, self.port)
-                    print(f"[+] Connected to Phone Speaker via WebSocket (ws://{self.ip}:{self.port}/ws/speaker)", flush=True)
+                    print(f"[+] Connected to Phone Speaker via WebSocket (ws://{self.ip}:{self.port}/ws/speaker) [48kHz STEREO]", flush=True)
                 except Exception:
                     is_ws = False
                     http_header = (
                         f"POST /speaker_feed HTTP/1.1\r\n"
                         f"Host: {self.ip}:{self.port}\r\n"
-                        f"Content-Type: audio/x-raw; rate={SAMPLE_RATE}; channels=1; format=s16le\r\n"
+                        f"Content-Type: audio/x-raw; rate={SAMPLE_RATE}; channels={SPEAKER_CHANNELS}; format=s16le\r\n"
                         f"Connection: keep-alive\r\n\r\n"
                     ).encode('utf-8')
                     sock.sendall(http_header)
@@ -185,10 +187,9 @@ class PcToPhoneSpeakerTransmitter:
                     except queue.Empty:
                         continue
 
-                    # Ultra-low latency anti-lag sync:
-                    # If queue builds up beyond 3 chunks (~60ms), flush older chunks so transmission stays real-time
-                    if self.audio_queue.qsize() > 3:
-                        while self.audio_queue.qsize() > 1:
+                    # Real-time pacing: only trim if queue has severely backed up (> 16 chunks = 320ms stall)
+                    if self.audio_queue.qsize() > 16:
+                        while self.audio_queue.qsize() > 4:
                             try:
                                 self.audio_queue.get_nowait()
                             except Exception:
@@ -263,7 +264,7 @@ class PcToPhoneSpeakerTransmitter:
         dev_channels = int(loopback_dev['maxInputChannels'])
         dev_rate = int(loopback_dev['defaultSampleRate'])
         self.current_device_name = loopback_dev['name']
-        print(f"[+] Capturing PC system audio from: '{self.current_device_name}' ({dev_rate}Hz, {dev_channels}ch)", flush=True)
+        print(f"[+] Capturing PC system audio from: '{self.current_device_name}' ({dev_rate}Hz, {dev_channels}ch -> 48kHz Stereo)", flush=True)
 
         last_rms_log = 0.0
 
@@ -273,36 +274,43 @@ class PcToPhoneSpeakerTransmitter:
                 return (None, pyaudio.paContinue)
 
             try:
+                # Capture in pristine 16-bit 2-channel Stereo
                 if dev_channels == 2:
                     pcm_stereo = np.frombuffer(in_data, dtype=np.int16).reshape(-1, 2)
-                    mono_samples = ((pcm_stereo[:, 0].astype(np.int32) + pcm_stereo[:, 1].astype(np.int32)) // 2).astype(np.int16)
                 elif dev_channels == 1:
-                    mono_samples = np.frombuffer(in_data, dtype=np.int16)
+                    pcm_mono = np.frombuffer(in_data, dtype=np.int16)
+                    pcm_stereo = np.column_stack((pcm_mono, pcm_mono))
                 else:
+                    # Multi-channel (5.1 / 7.1) -> downmix to stereo
                     pcm_all = np.frombuffer(in_data, dtype=np.int16).reshape(-1, dev_channels)
-                    mono_samples = pcm_all[:, 0].astype(np.int16)
+                    fl = pcm_all[:, 0].astype(np.float32)
+                    fr = pcm_all[:, 1].astype(np.float32)
+                    c = pcm_all[:, 2].astype(np.float32) if dev_channels > 2 else 0.0
+                    left = np.clip(fl + 0.707 * c, -32768, 32767).astype(np.int16)
+                    right = np.clip(fr + 0.707 * c, -32768, 32767).astype(np.int16)
+                    pcm_stereo = np.column_stack((left, right))
 
-                # Dynamic resampling if hardware sample rate != 48000Hz (endpoint=False ensures continuous block transitions)
-                if dev_rate != SAMPLE_RATE and len(mono_samples) > 0:
-                    out_count = int(round(len(mono_samples) * SAMPLE_RATE / dev_rate))
-                    mono_samples = np.interp(
-                        np.linspace(0, len(mono_samples), out_count, endpoint=False),
-                        np.arange(len(mono_samples)),
-                        mono_samples
-                    ).astype(np.int16)
+                # Dynamic studio resampling if hardware sample rate != 48000Hz (e.g. 44100Hz or 96000Hz)
+                if dev_rate != SAMPLE_RATE and len(pcm_stereo) > 0:
+                    out_count = int(round(len(pcm_stereo) * SAMPLE_RATE / dev_rate))
+                    t_in = np.arange(len(pcm_stereo))
+                    t_out = np.linspace(0, len(pcm_stereo), out_count, endpoint=False)
+                    l_resampled = np.interp(t_out, t_in, pcm_stereo[:, 0]).astype(np.int16)
+                    r_resampled = np.interp(t_out, t_in, pcm_stereo[:, 1]).astype(np.int16)
+                    pcm_stereo = np.column_stack((l_resampled, r_resampled))
 
                 # Periodic volume logging so user knows audio is actively captured
                 now = time.time()
                 if now - last_rms_log > 3.0:
                     last_rms_log = now
-                    max_amp = int(np.max(np.abs(mono_samples))) if len(mono_samples) > 0 else 0
+                    max_amp = int(np.max(np.abs(pcm_stereo))) if len(pcm_stereo) > 0 else 0
                     if max_amp > 150:
-                        print(f"[SPEAKER STREAMING] Audio active: Peak = {max_amp} / 32767 -> Playing on Phone", flush=True)
+                        print(f"[SPEAKER STREAMING] Audio active: Peak = {max_amp} / 32767 -> Playing on Phone (Stereo 48kHz)", flush=True)
 
-                pcm_bytes = mono_samples.tobytes()
+                pcm_bytes = pcm_stereo.tobytes()
 
-                # Low-latency buffer: cap audio queue to 4 chunks (~80ms max)
-                while self.audio_queue.qsize() >= 4:
+                # Low-latency non-blocking buffer push: only drop if severely backlogged (> 25 chunks = 500ms)
+                while self.audio_queue.qsize() >= 25:
                     try:
                         self.audio_queue.get_nowait()
                     except Exception:
@@ -357,20 +365,25 @@ class PcToPhoneSpeakerTransmitter:
         def audio_callback(indata, frames, time_info, status):
             if not self.running:
                 return
-            pcm_data = (np.clip(indata[:, 0], -1.0, 1.0) * 32767).astype(np.int16).tobytes()
-            while self.audio_queue.qsize() >= 12:
+            if indata.shape[1] >= 2:
+                stereo_float = indata[:, :2]
+            else:
+                stereo_float = np.column_stack((indata[:, 0], indata[:, 0]))
+            pcm_stereo = (np.clip(stereo_float, -1.0, 1.0) * 32767).astype(np.int16)
+            pcm_bytes = pcm_stereo.tobytes()
+            while self.audio_queue.qsize() >= 25:
                 try:
                     self.audio_queue.get_nowait()
                 except Exception:
                     break
             try:
-                self.audio_queue.put_nowait(pcm_data)
+                self.audio_queue.put_nowait(pcm_bytes)
             except Exception:
                 pass
 
         stream_kwargs = {
             'samplerate': SAMPLE_RATE,
-            'channels': 1,
+            'channels': 2,
             'dtype': 'float32',
             'blocksize': BLOCK_SIZE,
             'callback': audio_callback
