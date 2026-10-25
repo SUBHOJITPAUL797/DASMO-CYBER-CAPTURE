@@ -507,6 +507,30 @@ function initDeviceDiscovery() {
             renderDiscoveredDevices();
         });
 
+        window.dasmoAPI.onPhoneWake?.((wakeInfo) => {
+            console.log('[App] Auto-wake signal received from phone:', wakeInfo);
+            const ip = wakeInfo.phoneIp;
+            const port = wakeInfo.port || 8080;
+            if (ip) {
+                const dev = {
+                    id: `${ip}:${port}`,
+                    ip: ip,
+                    port: port,
+                    name: wakeInfo.phoneName || `DASMO Phone (${ip})`,
+                    streamUrl: `http://${ip}:${port}/video_feed`,
+                    snapshotUrl: `http://${ip}:${port}/snapshot.jpg`,
+                    audioUrl: `http://${ip}:${port}/audio_feed`,
+                    speakerUrl: `http://${ip}:${port}/speaker_feed`,
+                    controlUrl: `http://${ip}:${port}/api/control`
+                };
+                saveManualDevice(dev);
+                renderDiscoveredDevices();
+                if (!activeDevice || activeDevice.ip === ip) {
+                    connectToDevice(dev);
+                }
+            }
+        });
+
         renderDiscoveredDevices();
     }
 

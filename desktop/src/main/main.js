@@ -6,6 +6,7 @@ const { NetworkDiscoveryEngine } = require('./discovery');
 const { HardwareDriverBridge, getDriverScriptPath } = require('./bridge');
 const { BackgroundRemovalManager } = require('./bg_manager');
 const { checkForDesktopUpdates } = require('./updater');
+const { WakeServer } = require('./wake_server');
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -18,10 +19,12 @@ let tray = null;
 let discoveryEngine = null;
 let driverBridge = null;
 let bgManager = null;
+let wakeServer = null;
 let activeConnectedDevice = null;
 
 
 function createMainWindow() {
+    const isHidden = process.argv.includes('--hidden') || process.argv.includes('--minimized');
     mainWindow = new BrowserWindow({
         width: 1040,
         height: 700,
@@ -29,6 +32,7 @@ function createMainWindow() {
         minHeight: 580,
         backgroundColor: '#080c14',
         title: 'DASMO CYBER CAPTURE',
+        show: !isHidden,
         icon: path.join(__dirname, '../renderer/assets/icon.png'),
         frame: false,
         titleBarStyle: 'hidden',
@@ -42,6 +46,12 @@ function createMainWindow() {
 
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
+    mainWindow.once('ready-to-show', () => {
+        if (!isHidden) {
+            mainWindow.show();
+        }
+    });
+
     mainWindow.on('close', (event) => {
         if (!app.isQuitting) {
             event.preventDefault();
@@ -49,6 +59,21 @@ function createMainWindow() {
         }
         return false;
     });
+}
+
+function openAndFocusMainWindow() {
+    if (!mainWindow) {
+        createMainWindow();
+    } else {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+        // Force Windows 10/11 to bring window to the active foreground
+        mainWindow.setAlwaysOnTop(true);
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.setAlwaysOnTop(false);
+    }
 }
 
 function createPopoutWindow(streamUrl) {
@@ -269,6 +294,30 @@ app.whenReady().then(() => {
     createMainWindow();
     createTray();
 
+    // Auto-Wake Server: Listens on UDP 8089 and HTTP 8089 for phone wake pulses
+    wakeServer = new WakeServer();
+    wakeServer.on('wake', ({ phoneIp, port, phoneName, protocol }) => {
+        console.log(`[Main] Auto-opening DASMO Desktop window triggered by ${phoneName} (${phoneIp}) via ${protocol}`);
+        openAndFocusMainWindow();
+        if (phoneIp) {
+            discoveryEngine?.probeAndRegisterDevice(phoneIp, port || 8080, phoneName);
+            mainWindow?.webContents.send('wake:phone_opened', { phoneIp, port: port || 8080, phoneName });
+        }
+    });
+    wakeServer.start();
+
+    // Auto-register Windows startup in tray / background
+    try {
+        const settings = app.getLoginItemSettings();
+        if (!settings.openAtLogin) {
+            app.setLoginItemSettings({
+                openAtLogin: true,
+                path: process.execPath,
+                args: ['--hidden']
+            });
+        }
+    } catch (_) {}
+
     discoveryEngine.on('device_discovered', (device) => {
         mainWindow?.webContents.send('discovery:device_found', device);
     });
@@ -288,17 +337,14 @@ app.whenReady().then(() => {
     });
 
     app.on('second-instance', () => {
-        if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-        }
+        openAndFocusMainWindow();
     });
 });
 
 app.on('before-quit', () => {
     app.isQuitting = true;
     try {
+        wakeServer?.stop();
         bgManager?.stopWorker();
         driverBridge?.stopVirtualCamera();
         driverBridge?.stopAudioBridge();

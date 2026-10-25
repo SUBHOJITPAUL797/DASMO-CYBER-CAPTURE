@@ -58,6 +58,13 @@ contextBridge.exposeInMainWorld('dasmoAPI', {
     // Phone Remote Control
     sendPhoneControl: (action, value) => ipcRenderer.invoke('phone:control', { action, value }),
 
+    // Phone Auto-Wake Notification
+    onPhoneWake: (callback) => {
+        const handler = (event, data) => callback(data);
+        ipcRenderer.on('wake:phone_opened', handler);
+        return () => ipcRenderer.removeListener('wake:phone_opened', handler);
+    },
+
     // OTA Updates
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
     getAppVersion: () => ipcRenderer.invoke('app:get-version'),

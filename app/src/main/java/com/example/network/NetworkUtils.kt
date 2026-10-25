@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.NetworkInterface
 import java.util.Collections
 
@@ -133,5 +134,23 @@ object NetworkUtils {
         } catch (_: Exception) {
             Pair(95, 32.0f)
         }
+    }
+
+    fun getBroadcastAddresses(): List<InetAddress> {
+        val result = mutableListOf<InetAddress>()
+        try {
+            result.add(InetAddress.getByName("255.255.255.255"))
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                if (intf.isLoopback || !intf.isUp) continue
+                for (ia in intf.interfaceAddresses) {
+                    val broadcast = ia.broadcast
+                    if (broadcast != null && broadcast is Inet4Address && !result.contains(broadcast)) {
+                        result.add(broadcast)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return result
     }
 }

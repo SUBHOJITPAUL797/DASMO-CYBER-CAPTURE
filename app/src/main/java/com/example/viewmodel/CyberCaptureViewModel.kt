@@ -22,6 +22,7 @@ import com.example.model.PairedDevice
 import com.example.model.StreamResolution
 import com.example.network.CyberNsdBroadcaster
 import com.example.network.CyberStreamServer
+import com.example.network.CyberWakeClient
 import com.example.network.NetworkUtils
 import com.example.service.DasmoCaptureService
 import org.json.JSONObject
@@ -76,6 +77,7 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     private var audioEngine = CyberAudioEngine(application)
     private var streamServer: CyberStreamServer? = null
     private var nsdBroadcaster = CyberNsdBroadcaster(application)
+    private val wakeClient = CyberWakeClient(application)
 
     private var telemetryJob: Job? = null
     private var currentLifecycleOwner: LifecycleOwner? = null
@@ -86,6 +88,8 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         updateNetworkInfo()
         generatePairingQrCode()
         checkAppUpdates()
+        ensureServerStarted()
+        triggerDesktopWake()
 
         viewModelScope.launch {
             audioEngine.connectedAudioDeviceName.collect { devName ->
@@ -190,13 +194,9 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         cameraManager?.startCamera(lifecycleOwner, previewView, _config.value)
     }
 
-    fun startCapture() {
-        if (_isStreamingActive.value) return
+    fun ensureServerStarted() {
+        if (streamServer != null) return
 
-        val app = getApplication<Application>()
-        updateNetworkInfo()
-
-        // 1. Start Server
         streamServer = CyberStreamServer(
             port = _config.value.serverPort,
             onRemoteControlAction = { action, value ->
@@ -221,6 +221,7 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                     put("device_name", devName)
                     put("model", android.os.Build.MODEL)
                     put("manufacturer", android.os.Build.MANUFACTURER)
+                    put("is_streaming", _isStreamingActive.value)
                     put("fps", stats.fps)
                     put("mic_db", stats.micLevelDb)
                     put("battery_pct", stats.batteryPercent)
@@ -244,10 +245,50 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
                     put("active_filter", cfg.activeFilter.name)
                     put("resolution", cfg.resolution.label)
                 }
+            },
+            onClientConnected = { clientIp ->
+                registerConnectingClient(clientIp)
             }
         ).apply {
             start(viewModelScope)
         }
+    }
+
+    private fun registerConnectingClient(clientIp: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = db.pairedDeviceDao().getAllDevicesDirect().find { it.ipAddress == clientIp }
+            if (existing == null) {
+                val device = PairedDevice(
+                    id = UUID.randomUUID().toString(),
+                    name = "PC ($clientIp)",
+                    ipAddress = clientIp,
+                    port = 8089,
+                    lastConnectedAt = System.currentTimeMillis()
+                )
+                db.pairedDeviceDao().insertDevice(device)
+            } else {
+                db.pairedDeviceDao().updateDevice(existing.copy(lastConnectedAt = System.currentTimeMillis()))
+            }
+        }
+    }
+
+    fun triggerDesktopWake() {
+        viewModelScope.launch(Dispatchers.IO) {
+            ensureServerStarted()
+            val knownDevices = db.pairedDeviceDao().getAllDevicesDirect()
+            val knownIps = knownDevices.map { it.ipAddress }.filter { it.isNotBlank() }
+            wakeClient.sendWakeSignal(knownIps, _config.value.serverPort, viewModelScope)
+        }
+    }
+
+    fun startCapture() {
+        if (_isStreamingActive.value) return
+
+        val app = getApplication<Application>()
+        updateNetworkInfo()
+
+        // 1. Ensure Server is running
+        ensureServerStarted()
 
         // 2. Start Audio Engine
         audioEngine.setGain(_config.value.micGain)
@@ -276,6 +317,8 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         sessionStartTime = System.currentTimeMillis()
         startTelemetryLoop()
 
+        triggerDesktopWake()
+
         _toastMessage.value = "Air Link Broadcasting on http://${_stats.value.serverIp}:${_config.value.serverPort}"
     }
 
@@ -283,9 +326,7 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         if (!_isStreamingActive.value) return
 
         telemetryJob?.cancel()
-        streamServer?.stop()
-        streamServer = null
-
+        // Server stays alive in standby mode so desktop client can stay connected/query status
         audioEngine.stopMicCapture()
         audioEngine.stopSpeakerPlayback()
         nsdBroadcaster.stopBroadcasting()
@@ -441,6 +482,8 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
     private fun handleRemoteAction(action: String, value: String) {
         viewModelScope.launch(Dispatchers.Main) {
             when (action) {
+                "start_stream" -> startCapture()
+                "stop_stream" -> stopCapture()
                 "pause_video" -> {
                     if (value.isNotEmpty()) {
                         val pause = value.toBoolean()
@@ -597,6 +640,8 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
 
     override fun onCleared() {
         stopCapture()
+        streamServer?.stop()
+        streamServer = null
         cameraManager?.release()
         audioEngine.release()
         super.onCleared()

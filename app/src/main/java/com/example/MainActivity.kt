@@ -25,15 +25,19 @@ import com.example.viewmodel.CyberAuthViewModel
 import com.example.viewmodel.CyberCaptureViewModel
 
 class MainActivity : ComponentActivity() {
+    private lateinit var captureViewModel: CyberCaptureViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
 
+        captureViewModel = androidx.lifecycle.ViewModelProvider(this)[CyberCaptureViewModel::class.java]
+
         setContent {
             MyApplicationTheme {
                 val navController = rememberNavController()
-                val viewModel: CyberCaptureViewModel = viewModel()
+                val viewModel: CyberCaptureViewModel = captureViewModel
                 val authViewModel: CyberAuthViewModel = viewModel()
                 val config by viewModel.config.collectAsState()
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
@@ -92,6 +96,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::captureViewModel.isInitialized) {
+            captureViewModel.triggerDesktopWake()
         }
     }
 }

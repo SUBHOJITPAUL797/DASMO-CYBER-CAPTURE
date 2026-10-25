@@ -33,7 +33,8 @@ class CyberStreamServer(
     private val onSpeakerPcmReceived: (ByteArray, Int, Int) -> Unit,
     private val onAudioFeedConnected: ((OutputStream) -> Unit)? = null,
     private val onAudioFeedDisconnected: ((OutputStream) -> Unit)? = null,
-    private val telemetryProvider: (() -> JSONObject?)? = null
+    private val telemetryProvider: (() -> JSONObject?)? = null,
+    private val onClientConnected: ((String) -> Unit)? = null
 ) {
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
@@ -126,6 +127,11 @@ class CyberStreamServer(
                 socket.setSoLinger(false, 0)     // Instant socket close — avoids TIME_WAIT latency on disconnect
                 val inputStream = socket.getInputStream()
                 val outputStream = socket.getOutputStream()
+
+                val remoteIp = socket.inetAddress?.hostAddress
+                if (!remoteIp.isNullOrBlank() && remoteIp != "127.0.0.1" && remoteIp != "0.0.0.0") {
+                    onClientConnected?.invoke(remoteIp)
+                }
 
                 val headerLines = readHttpHeaderLines(inputStream)
                 if (headerLines.isEmpty()) return@withContext

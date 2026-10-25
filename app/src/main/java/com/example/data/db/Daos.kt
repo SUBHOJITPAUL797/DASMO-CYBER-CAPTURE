@@ -15,6 +15,9 @@ interface PairedDeviceDao {
     @Query("SELECT * FROM paired_devices ORDER BY lastConnectedAt DESC")
     fun getAllDevices(): Flow<List<PairedDevice>>
 
+    @Query("SELECT * FROM paired_devices ORDER BY lastConnectedAt DESC")
+    suspend fun getAllDevicesDirect(): List<PairedDevice>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDevice(device: PairedDevice)
 
