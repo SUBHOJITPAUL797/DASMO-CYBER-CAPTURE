@@ -336,7 +336,10 @@ app.whenReady().then(() => {
         if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
 
-    app.on('second-instance', () => {
+    app.on('second-instance', (event, commandLine) => {
+        if (commandLine && (commandLine.includes('--hidden') || commandLine.includes('--minimized'))) {
+            return;
+        }
         openAndFocusMainWindow();
     });
 });
@@ -391,7 +394,7 @@ ipcMain.handle('driver:install-audio', () => {
     const { exec } = require('child_process');
     const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
     if (fs.existsSync(batPath)) {
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${batPath}' -Verb RunAs"`, (err) => {
             if (err) console.warn('[Setup DASMO Virtual Audio]', err);
         });
         return { success: true, message: 'DASMO Virtual Microphone setup launched with Administrator privileges' };
@@ -403,7 +406,7 @@ ipcMain.handle('driver:uninstall-audio', () => {
     const { exec } = require('child_process');
     const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
     if (fs.existsSync(batPath)) {
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\" -Uninstall\\"' -Verb RunAs"`, (err) => {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${batPath}' -ArgumentList '-Uninstall' -Verb RunAs"`, (err) => {
             if (err) console.warn('[Uninstall DASMO Virtual Audio]', err);
         });
         return { success: true, message: 'DASMO Virtual Hardware uninstaller launched' };
@@ -415,7 +418,7 @@ ipcMain.handle('driver:install-cam-driver', () => {
     const { exec } = require('child_process');
     const batPath = getDriverScriptPath('install_dasmo_camera.bat');
     if (fs.existsSync(batPath)) {
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${batPath}' -Verb RunAs"`, (err) => {
             if (err) console.warn('[Install Cam Driver]', err);
         });
         return { success: true, message: 'Camera installer launched with Administrator privileges' };
@@ -427,7 +430,7 @@ ipcMain.handle('driver:configure-device-names', () => {
     const { exec } = require('child_process');
     const batPath = getDriverScriptPath('setup_dasmo_virtual_mic.bat');
     if (fs.existsSync(batPath)) {
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \\"\\"${batPath}\\"\\"' -Verb RunAs"`, (err) => {
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${batPath}' -Verb RunAs"`, (err) => {
             if (err) console.warn('[Configure Device Names]', err);
         });
         return { success: true, message: 'Device branding setup launched with Administrator privileges' };
