@@ -68,7 +68,7 @@ class BackgroundRemovalManager {
         }
     }
 
-    async removeBackground(imageBase64, model = 'isnet-general-use') {
+    async removeBackground(imageBase64, model = 'u2netp') {
         if (!this.process) {
             this.startWorker();
         }

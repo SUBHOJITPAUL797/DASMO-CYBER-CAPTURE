@@ -421,6 +421,9 @@ class PhoneMicToPcReceiver:
 
     def _find_virtual_cable_index(self):
         """Finds the virtual microphone hardware injection device, strictly excluding physical speakers."""
+        virtual_keywords = ['cable input', 'dasmo cyber audio link', 'vb-audio', 'cable', 'dasmo', '{769552b1']
+        physical_keywords = ['realtek', 'headphone', 'earphone']
+
         if HAS_PYAUDIO_WPATCH and GLOBAL_PA:
             p = GLOBAL_PA
             # First pass: WASAPI virtual audio target
@@ -430,8 +433,9 @@ class PhoneMicToPcReceiver:
                     if d['maxOutputChannels'] > 0:
                         name_l = d['name'].lower()
                         host_api = p.get_host_api_info_by_index(d['hostApi'])['name'].lower()
-                        if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']) and 'wasapi' in host_api:
-                            if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                        if 'wasapi' in host_api and any(k in name_l for k in virtual_keywords):
+                            # Ensure it's not a physical speaker/headphone
+                            if not any(ph in name_l for ph in physical_keywords):
                                 return d['index']
                 except Exception:
                     pass
@@ -441,8 +445,8 @@ class PhoneMicToPcReceiver:
                     d = p.get_device_info_by_index(i)
                     if d['maxOutputChannels'] > 0:
                         name_l = d['name'].lower()
-                        if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']):
-                            if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                        if any(k in name_l for k in virtual_keywords):
+                            if not any(ph in name_l for ph in physical_keywords):
                                 return d['index']
                 except Exception:
                     pass
@@ -450,8 +454,8 @@ class PhoneMicToPcReceiver:
             for i, dev in enumerate(sd.query_devices()):
                 if dev['max_output_channels'] > 0:
                     name_l = dev['name'].lower()
-                    if any(k in name_l for k in ['dasmo', 'cable', 'virtual', '{769552b1']):
-                        if not any(spk in name_l for spk in ['realtek', 'speaker', 'headphone', 'earphone']):
+                    if any(k in name_l for k in virtual_keywords):
+                        if not any(ph in name_l for ph in physical_keywords):
                             return i
         return None
 

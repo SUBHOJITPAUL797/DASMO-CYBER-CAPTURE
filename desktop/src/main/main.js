@@ -297,8 +297,8 @@ app.whenReady().then(() => {
     // Auto-Wake Server: Listens on UDP 8089 and HTTP 8089 for phone wake pulses
     wakeServer = new WakeServer();
     wakeServer.on('wake', ({ phoneIp, port, phoneName, protocol }) => {
-        console.log(`[Main] Auto-opening DASMO Desktop window triggered by ${phoneName} (${phoneIp}) via ${protocol}`);
-        openAndFocusMainWindow();
+        console.log(`[Main] Silent background auto-connect triggered by ${phoneName} (${phoneIp}) via ${protocol}`);
+        // Keep software running silently in background without popping window over user's active apps
         if (phoneIp) {
             discoveryEngine?.probeAndRegisterDevice(phoneIp, port || 8080, phoneName);
             mainWindow?.webContents.send('wake:phone_opened', { phoneIp, port: port || 8080, phoneName });
@@ -539,7 +539,7 @@ ipcMain.handle('capture:remove-bg', async (event, { image, model }) => {
         if (!bgManager) {
             bgManager = new BackgroundRemovalManager();
         }
-        return await bgManager.removeBackground(image, model || 'isnet-general-use');
+        return await bgManager.removeBackground(image, model || 'u2netp');
     } catch (err) {
         console.error('[IPC capture:remove-bg error]', err);
         return { success: false, error: err.message };

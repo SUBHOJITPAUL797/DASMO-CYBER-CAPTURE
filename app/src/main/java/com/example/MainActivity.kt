@@ -98,11 +98,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    override fun onResume() {
-        super.onResume()
-        if (::captureViewModel.isInitialized) {
-            captureViewModel.triggerDesktopWake()
-        }
-    }
 }

@@ -200,6 +200,9 @@
                         <button class="hud-btn" style="width: 100%; justify-content: center; margin-top: 4px; border-color: var(--cyan); color: var(--cyan);" id="btnStartAudioRelay">
                             <span>📡</span> <span id="lblAudioRelayBtn">Start PC ➔ Phone Speaker Relay</span>
                         </button>
+                        <button class="hud-btn" style="width: 100%; justify-content: center; margin-top: 6px; border-color: #00e5ff; color: #00e5ff;" id="btnQuickSetupMic">
+                            <span>🎙️</span> <span id="lblQuickSetupMic">Setup Phone Mic for Win+H (Default PC Mic)</span>
+                        </button>
                     </div>
 
                     <!-- Camera Optics Card -->
@@ -427,10 +430,10 @@
 
                     <div class="sidebar-section-title" style="margin-top: 14px;">AI MODEL SELECTION</div>
                     <select id="selectStudioModel" class="hud-select" style="width: 100%; padding: 6px; background: rgba(8,12,20,0.8); color: #fff; border: 1px solid var(--border); border-radius: 6px; font-size: 11px;">
-                        <option value="isnet-general-use" selected>🔬 Deep Studio AI (IS-Net 1024px) - Best</option>
-                        <option value="birefnet-portrait">👤 BiRefNet Portrait Master (Ultra)</option>
-                        <option value="silueta">⚡ Fast Light (Silueta)</option>
-                        <option value="u2netp">🚀 Instant Micro (u2netp)</option>
+                        <option value="u2netp" selected>⚡ Fast AI Portrait (Instant ~1.5s) - Recommended</option>
+                        <option value="silueta">🚀 Fast Light (Silueta)</option>
+                        <option value="isnet-general-use">🔬 Deep Studio AI (IS-Net 1024px - Slower)</option>
+                        <option value="birefnet-portrait">👤 BiRefNet Portrait Master</option>
                     </select>
 
                     <div class="sidebar-section-title" style="margin-top: 14px;">PORTAL & EXPORT ACTIONS</div>

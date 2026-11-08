@@ -44,8 +44,9 @@ def launch_desktop():
     exe = find_desktop_executable()
     if exe:
         try:
+            # Launch silently in background/tray without showing window
             subprocess.Popen(
-                [exe],
+                [exe, "--hidden"],
                 creationflags=0x00000008 | 0x00000200, # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
                 close_fds=True
             )

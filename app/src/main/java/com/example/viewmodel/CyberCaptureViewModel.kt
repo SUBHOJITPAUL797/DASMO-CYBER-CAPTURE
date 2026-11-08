@@ -89,7 +89,6 @@ class CyberCaptureViewModel(application: Application) : AndroidViewModel(applica
         generatePairingQrCode()
         checkAppUpdates()
         ensureServerStarted()
-        triggerDesktopWake()
 
         viewModelScope.launch {
             audioEngine.connectedAudioDeviceName.collect { devName ->

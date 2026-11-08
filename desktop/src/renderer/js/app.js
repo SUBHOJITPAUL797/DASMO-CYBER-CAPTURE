@@ -206,7 +206,7 @@ function initStudioCapture() {
             statusEl.style.color = '#00e5ff';
         }
 
-        const model = modelSelect ? modelSelect.value : 'isnet-general-use';
+        const model = modelSelect ? modelSelect.value : 'u2netp';
 
         try {
             const res = await window.dasmoAPI.removeBackground({
@@ -906,7 +906,21 @@ function initHardwareControls() {
         } catch (e) {
             btn.innerText = 'Error Installing';
         }
-        setTimeout(() => { btn.innerText = '🎧 1-Click Install Audio Driver'; }, 3000);
+        setTimeout(() => { btn.innerText = '🎙️ 1-Click Setup Mic'; }, 3000);
+    });
+
+    document.getElementById('btnQuickSetupMic')?.addEventListener('click', async () => {
+        const lbl = document.getElementById('lblQuickSetupMic');
+        if (lbl) lbl.innerText = 'Setting up DASMO Virtual Mic...';
+        try {
+            await window.dasmoAPI?.installAudioDriver();
+            if (lbl) lbl.innerText = '✓ Setup Launched (Check UAC Prompt)';
+        } catch (e) {
+            if (lbl) lbl.innerText = 'Error launching setup';
+        }
+        setTimeout(() => {
+            if (lbl) lbl.innerText = 'Setup Phone Mic for Win+H (Default PC Mic)';
+        }, 4000);
     });
 
     // 📦 Install Dependencies

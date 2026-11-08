@@ -45,7 +45,7 @@ class CyberWakeClient(private val context: Context) {
 
                 val payload = JSONObject().apply {
                     put("cmd", "WAKE_DESKTOP")
-                    put("action", "open_window")
+                    put("action", "silent_background")
                     put("app", "DASMO CYBER CAPTURE")
                     put("version", "1.6.0")
                     put("phone_ip", phoneIp)
