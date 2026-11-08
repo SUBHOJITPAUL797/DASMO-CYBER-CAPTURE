@@ -47,7 +47,7 @@ class CyberWakeClient(private val context: Context) {
                     put("cmd", "WAKE_DESKTOP")
                     put("action", "silent_background")
                     put("app", "DASMO CYBER CAPTURE")
-                    put("version", "1.6.0")
+                    put("version", "1.6.1")
                     put("phone_ip", phoneIp)
                     put("phone_name", phoneName)
                     put("device_name", phoneName)

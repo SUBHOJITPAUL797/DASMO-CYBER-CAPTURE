@@ -1,5 +1,5 @@
 """
-DASMO CYBER CAPTURE - Studio AI Background Removal Engine (v1.6.0)
+DASMO CYBER CAPTURE - Studio AI Background Removal Engine (v1.6.1)
 Ultra-Fast Deep Neural Portrait Matting + Photoshop-grade Anti-Aliasing
 Optimized for < 2.0s inference on CPU without freezing.
 """

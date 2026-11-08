@@ -94,7 +94,7 @@ function initWebcamBgControls() {
 }
 
 // ==============================================================================
-// STUDIO AI PHOTO CAPTURE & MATTING CONTROLLER (v1.6.0)
+// STUDIO AI PHOTO CAPTURE & MATTING CONTROLLER (v1.6.1)
 // High-Resolution Snapshot -> Deep Neural Model -> Studio-Clean Cutout
 // DirectShow Virtual Camera Freeze: Broadcasts Studio Photo to Portals!
 // ==============================================================================
@@ -1365,7 +1365,7 @@ async function checkDesktopUpdates(isManual = false) {
 
     try {
         const updateInfo = await window.dasmoAPI.checkForUpdates();
-        const currentVer = (updateInfo && updateInfo.currentVersion) || (await window.dasmoAPI.getAppVersion?.()) || '1.6.0';
+        const currentVer = (updateInfo && updateInfo.currentVersion) || (await window.dasmoAPI.getAppVersion?.()) || '1.6.1';
         const modalCur = document.getElementById('modalCurrentVer');
         if (modalCur) modalCur.innerText = `CURRENT: v${currentVer}`;
 
